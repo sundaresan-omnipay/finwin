@@ -26,17 +26,19 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useBlur } from "@/contexts/blur-context";
 
-const navItems = [
+const BASE_NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight },
   { href: "/dashboard/budget", label: "Budget", icon: Target },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/savings", label: "SIP Savings", icon: TrendingUp },
-  { href: "/dashboard/loans", label: "Loans", icon: Building2 },
   { href: "/dashboard/goals", label: "Goals", icon: Star },
   { href: "/dashboard/wrapped", label: "Wrapped", icon: Gift },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
+
+const LOANS_ITEM = { href: "/dashboard/loans", label: "Loans", icon: Building2 };
+const LOANS_EMAIL = "rsundaresan147@gmail.com";
 
 export default function Sidebar({ user }: { user: User }) {
   const pathname = usePathname();
@@ -44,6 +46,10 @@ export default function Sidebar({ user }: { user: User }) {
   const supabase = createClient();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { blurred, toggle: toggleBlur } = useBlur();
+
+  const navItems = user.email === LOANS_EMAIL
+    ? [...BASE_NAV_ITEMS.slice(0, 5), LOANS_ITEM, ...BASE_NAV_ITEMS.slice(5)]
+    : BASE_NAV_ITEMS;
 
   async function handleSignOut() {
     await supabase.auth.signOut();

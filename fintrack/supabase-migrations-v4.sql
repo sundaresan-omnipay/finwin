@@ -1,8 +1,8 @@
--- FinWin v4 Migrations — Schema Fix + Savings Goals
--- Run this in your Supabase SQL editor AFTER supabase-migrations-v3.sql
+-- FinWin v4 Migrations — Complete Fix
+-- Run this entire file in your Supabase SQL editor (safe to run multiple times)
 
 -- ─────────────────────────────────────────────────────────────
--- 0. Fix: update transactions category CHECK constraint to include savings + emi
+-- 0. Fix transactions category constraint to include savings + emi
 -- ─────────────────────────────────────────────────────────────
 DO $$
 DECLARE
@@ -23,15 +23,29 @@ ALTER TABLE transactions
   CHECK (category IN ('food','transport','shopping','bills','health','entertainment','travel','education','savings','emi','other'));
 
 -- ─────────────────────────────────────────────────────────────
--- 1. Fix: add missing column to loans table
---    (run this even if the column already exists — IF NOT EXISTS is safe)
+-- 1. Fix loans table — add ALL columns that may be missing
+--    (IF NOT EXISTS means safe to run even if already present)
 -- ─────────────────────────────────────────────────────────────
-ALTER TABLE loans
-  ADD COLUMN IF NOT EXISTS annual_interest_rate decimal(5,2) NOT NULL DEFAULT 0
-    CHECK (annual_interest_rate >= 0);
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS loan_name            text;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS principal_amount     decimal(14,2);
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS emi_amount           decimal(12,2);
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS annual_interest_rate decimal(5,2)  DEFAULT 0;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS tenure_months        integer;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS start_date           date;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS is_active            boolean       DEFAULT true;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS notes                text;
+
+-- Fill in defaults for any rows that got saved with nulls
+UPDATE loans SET loan_name            = 'My Loan'      WHERE loan_name IS NULL;
+UPDATE loans SET principal_amount     = 0              WHERE principal_amount IS NULL;
+UPDATE loans SET emi_amount           = 0              WHERE emi_amount IS NULL;
+UPDATE loans SET annual_interest_rate = 0              WHERE annual_interest_rate IS NULL;
+UPDATE loans SET tenure_months        = 12             WHERE tenure_months IS NULL;
+UPDATE loans SET start_date           = CURRENT_DATE   WHERE start_date IS NULL;
+UPDATE loans SET is_active            = true           WHERE is_active IS NULL;
 
 -- ─────────────────────────────────────────────────────────────
--- 2. Savings Goals
+-- 2. Savings Goals table
 -- ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS goals (
   id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -53,3 +67,9 @@ CREATE POLICY "Users can update own goals" ON goals FOR UPDATE USING (auth.uid()
 CREATE POLICY "Users can delete own goals" ON goals FOR DELETE USING (auth.uid() = user_id);
 
 CREATE INDEX IF NOT EXISTS goals_user_id_idx ON goals(user_id);
+
+-- ─────────────────────────────────────────────────────────────
+-- 3. IMPORTANT: refresh PostgREST schema cache
+--    (fixes "column not found in schema cache" errors)
+-- ─────────────────────────────────────────────────────────────
+NOTIFY pgrst, 'reload schema';
