@@ -2,6 +2,27 @@
 -- Run this in your Supabase SQL editor AFTER supabase-migrations-v3.sql
 
 -- ─────────────────────────────────────────────────────────────
+-- 0. Fix: update transactions category CHECK constraint to include savings + emi
+-- ─────────────────────────────────────────────────────────────
+DO $$
+DECLARE
+  cname text;
+BEGIN
+  SELECT conname INTO cname
+  FROM pg_constraint
+  WHERE conrelid = 'transactions'::regclass
+    AND contype = 'c'
+    AND pg_get_constraintdef(oid) ILIKE '%category%';
+  IF cname IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE transactions DROP CONSTRAINT ' || quote_ident(cname);
+  END IF;
+END $$;
+
+ALTER TABLE transactions
+  ADD CONSTRAINT transactions_category_check
+  CHECK (category IN ('food','transport','shopping','bills','health','entertainment','travel','education','savings','emi','other'));
+
+-- ─────────────────────────────────────────────────────────────
 -- 1. Fix: add missing column to loans table
 --    (run this even if the column already exists — IF NOT EXISTS is safe)
 -- ─────────────────────────────────────────────────────────────

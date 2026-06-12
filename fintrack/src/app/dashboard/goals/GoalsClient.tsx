@@ -114,7 +114,8 @@ export default function GoalsClient({ goals, userId }: Props) {
     router.refresh();
   }
 
-  function getIcon(name: string) {
+  function getIcon(name: string | undefined | null) {
+    if (!name) return "🎯";
     const map: Record<string, string> = {
       home: "🏠", house: "🏠", car: "🚗", vehicle: "🚗",
       travel: "✈️", vacation: "🏖️", trip: "✈️",
