@@ -6,7 +6,6 @@ import { motion } from "framer-motion";
 import { Plus, X, Loader2, TrendingUp, CheckCircle2, Circle, PauseCircle, Pencil, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Sip } from "@/types";
-import { formatCurrency } from "@/lib/utils";
 import { BlurAmount } from "@/components/ui/BlurAmount";
 
 interface TxnSnap { id: string; description: string; amount: number; date: string; }
@@ -17,19 +16,8 @@ interface Props {
   userId: string;
 }
 
-function monthsBetween(startDate: string): number {
-  const start = new Date(startDate);
-  const now = new Date();
-  return Math.max(0, (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()));
-}
 
-function ordinal(n: number) {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return n + (s[(v - 20) % 10] || s[v] || s[0]);
-}
-
-const emptyForm = { fund_name: "", monthly_amount: "", sip_day: "1", start_date: new Date().toISOString().split("T")[0], notes: "" };
+const emptyForm = { fund_name: "", monthly_amount: "", notes: "" };
 
 export default function SavingsClient({ sips, currentMonthTxns, userId }: Props) {
   const router = useRouter();
@@ -61,8 +49,6 @@ export default function SavingsClient({ sips, currentMonthTxns, userId }: Props)
     setForm({
       fund_name: sip.fund_name,
       monthly_amount: String(sip.monthly_amount),
-      sip_day: String(sip.sip_day),
-      start_date: sip.start_date,
       notes: sip.notes ?? "",
     });
     setError("");
@@ -77,8 +63,8 @@ export default function SavingsClient({ sips, currentMonthTxns, userId }: Props)
       user_id: userId,
       fund_name: form.fund_name.trim(),
       monthly_amount: parseFloat(form.monthly_amount),
-      sip_day: parseInt(form.sip_day),
-      start_date: form.start_date,
+      sip_day: 1,
+      start_date: new Date().toISOString().split("T")[0],
       notes: form.notes.trim() || null,
     };
     if (editingSip) {
@@ -119,11 +105,6 @@ export default function SavingsClient({ sips, currentMonthTxns, userId }: Props)
     router.refresh();
   }
 
-  const totalInvested = sips.reduce((sum, sip) => {
-    const months = monthsBetween(sip.start_date);
-    return sum + sip.monthly_amount * months;
-  }, 0);
-
   const paidCount = activeSips.filter(isPaidThisMonth).length;
 
   return (
@@ -146,9 +127,9 @@ export default function SavingsClient({ sips, currentMonthTxns, userId }: Props)
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: "Monthly SIP total", value: <BlurAmount value={totalMonthly} className="number-font text-2xl font-700" />, sub: `${activeSips.length} active SIP${activeSips.length !== 1 ? "s" : ""}`, icon: "📅", color: "from-emerald-500 to-teal-600" },
-          { label: "Estimated invested", value: <BlurAmount value={totalInvested} className="number-font text-2xl font-700 text-white" />, sub: "Based on start dates", icon: "📈", color: "from-blue-500 to-indigo-600" },
-          { label: "Paid this month", value: <span className="number-font text-2xl font-700">{paidCount} / {activeSips.length}</span>, sub: paidCount === activeSips.length && activeSips.length > 0 ? "All done ✓" : `${activeSips.length - paidCount} remaining`, icon: "✅", color: "from-violet-500 to-purple-600" },
+          { label: "Monthly SIP total", value: <BlurAmount value={totalMonthly} className="number-font text-2xl font-700 text-white" />, sub: `${activeSips.length} active SIP${activeSips.length !== 1 ? "s" : ""}`, icon: "📅", color: "from-emerald-500 to-teal-600" },
+          { label: "Total SIPs", value: <span className="number-font text-2xl font-700 text-white">{sips.length}</span>, sub: `${activeSips.length} active · ${sips.length - activeSips.length} paused`, icon: "📈", color: "from-blue-500 to-indigo-600" },
+          { label: "Paid this month", value: <span className="number-font text-2xl font-700 text-white">{paidCount} / {activeSips.length}</span>, sub: paidCount === activeSips.length && activeSips.length > 0 ? "All done ✓" : `${activeSips.length - paidCount} remaining`, icon: "✅", color: "from-violet-500 to-purple-600" },
         ].map((card, i) => (
           <motion.div key={card.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
             className={`rounded-2xl p-5 bg-gradient-to-br ${card.color} text-white relative overflow-hidden`}>
@@ -174,8 +155,6 @@ export default function SavingsClient({ sips, currentMonthTxns, userId }: Props)
         <div className="space-y-3">
           {sips.map((sip, i) => {
             const paid = isPaidThisMonth(sip);
-            const months = monthsBetween(sip.start_date);
-            const totalInv = sip.monthly_amount * months;
             return (
               <motion.div key={sip.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
                 className={`bg-card border rounded-2xl p-5 transition-all ${!sip.is_active ? "opacity-60 border-border/40" : paid ? "border-emerald-300/50 dark:border-emerald-800/50" : "border-border/50"}`}>
@@ -191,11 +170,7 @@ export default function SavingsClient({ sips, currentMonthTxns, userId }: Props)
                         {paid && sip.is_active && <span className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 px-2 py-0.5 rounded-full font-medium">Paid this month ✓</span>}
                       </div>
                       <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                        <div>SIP date: <span className="font-medium">{ordinal(sip.sip_day)}</span> of every month</div>
-                        <div>Since <span className="font-medium">{new Date(sip.start_date).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}</span>
-                          {months > 0 && <> · <span className="font-medium">{months} month{months !== 1 ? "s" : ""}</span> invested</>}
-                        </div>
-                        {months > 0 && <div>Total invested: <BlurAmount value={totalInv} className="font-medium" /></div>}
+                        <div>Monthly SIP · auto-deducted each month</div>
                         {sip.notes && <div className="text-muted-foreground/70 italic">{sip.notes}</div>}
                       </div>
                     </div>
@@ -242,35 +217,22 @@ export default function SavingsClient({ sips, currentMonthTxns, userId }: Props)
             </div>
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-1.5 block text-muted-foreground">Fund name</label>
+                <label className="text-sm font-medium mb-1.5 block text-muted-foreground">SIP / Fund name</label>
                 <input type="text" required value={form.fund_name} onChange={(e) => setForm({ ...form, fund_name: e.target.value })}
                   className="w-full h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
                   placeholder="e.g. Axis Bluechip Fund" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block text-muted-foreground">Monthly amount (₹)</label>
-                  <input type="number" required min="1" step="0.01" value={form.monthly_amount} onChange={(e) => setForm({ ...form, monthly_amount: e.target.value })}
-                    className="w-full h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-                    placeholder="5000" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block text-muted-foreground">SIP date (day)</label>
-                  <input type="number" required min="1" max="28" value={form.sip_day} onChange={(e) => setForm({ ...form, sip_day: e.target.value })}
-                    className="w-full h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-                    placeholder="5" />
-                </div>
-              </div>
               <div>
-                <label className="text-sm font-medium mb-1.5 block text-muted-foreground">SIP start date</label>
-                <input type="date" required value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-                  className="w-full h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" />
+                <label className="text-sm font-medium mb-1.5 block text-muted-foreground">Monthly amount (₹)</label>
+                <input type="number" required min="1" step="0.01" value={form.monthly_amount} onChange={(e) => setForm({ ...form, monthly_amount: e.target.value })}
+                  className="w-full h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                  placeholder="5000" />
               </div>
               <div>
                 <label className="text-sm font-medium mb-1.5 block text-muted-foreground">Notes (optional)</label>
                 <input type="text" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   className="w-full h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-                  placeholder="e.g. Zerodha Coin" />
+                  placeholder="e.g. Zerodha Coin, auto-debit on 5th" />
               </div>
               {error && <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-2.5">{error}</div>}
               <div className="flex gap-3 pt-2">

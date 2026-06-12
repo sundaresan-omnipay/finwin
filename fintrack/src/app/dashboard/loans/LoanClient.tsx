@@ -27,8 +27,9 @@ interface AmortizationRow {
 }
 
 function computeAmortization(loan: Loan): AmortizationRow[] {
-  const r = loan.annual_interest_rate / 12 / 100;
-  let outstanding = loan.principal_amount;
+  const rate = loan.annual_interest_rate ?? 0;
+  const r = rate / 12 / 100;
+  let outstanding = loan.principal_amount ?? 0;
   const rows: AmortizationRow[] = [];
   const start = new Date(loan.start_date);
 
@@ -242,7 +243,7 @@ export default function LoanClient({ loans, currentMonthTxns, userId }: Props) {
                           {isPaid && loan.is_active && <span className="text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400 px-2 py-0.5 rounded-full font-medium">EMI paid ✓</span>}
                         </div>
                         <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                          <div>Principal: <BlurAmount value={loan.principal_amount} className="font-medium" /> · Rate: <span className="font-medium">{loan.annual_interest_rate}% p.a.</span></div>
+                          <div>Principal: <BlurAmount value={loan.principal_amount ?? 0} className="font-medium" /> · Rate: <span className="font-medium">{loan.annual_interest_rate ?? 0}% p.a.</span></div>
                           <div>
                             {paid} of {loan.tenure_months} months paid ·{" "}
                             {remaining > 0 ? <>{yearsLeft > 0 && `${yearsLeft}y `}{monthsLeft > 0 && `${monthsLeft}m`} remaining</> : "Fully paid off 🎉"}

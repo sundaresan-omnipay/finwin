@@ -165,4 +165,16 @@ export interface Loan {
   created_at: string;
 }
 
+export interface Goal {
+  id: string;
+  user_id: string;
+  goal_name: string;
+  target_amount: number;
+  current_amount: number;
+  target_date?: string;
+  notes?: string;
+  is_completed: boolean;
+  created_at: string;
+}
+
 export const CATEGORIES = Object.keys(CATEGORY_META) as Category[];
