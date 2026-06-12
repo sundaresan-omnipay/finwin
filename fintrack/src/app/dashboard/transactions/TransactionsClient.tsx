@@ -3,11 +3,12 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Search, Filter, Trash2, ArrowUpDown, Calendar, Download } from "lucide-react";
+import { Search, Trash2, ArrowUpDown, Calendar, Download, Coins } from "lucide-react";
 import { Transaction, CATEGORY_META, CATEGORIES } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import AddTransactionButton from "@/components/ui/AddTransactionButton";
+import { BlurAmount } from "@/components/ui/BlurAmount";
 
 interface Props {
   transactions: Transaction[];
@@ -17,6 +18,7 @@ export default function TransactionsClient({ transactions }: Props) {
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("all");
   const [monthFilter, setMonthFilter] = useState("all");
+  const [cashOnly, setCashOnly] = useState(false);
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const [deleting, setDeleting] = useState<string | null>(null);
   const router = useRouter();
@@ -33,15 +35,18 @@ export default function TransactionsClient({ transactions }: Props) {
         if (search && !t.description.toLowerCase().includes(search.toLowerCase())) return false;
         if (catFilter !== "all" && t.category !== catFilter) return false;
         if (monthFilter !== "all" && !t.date.startsWith(monthFilter)) return false;
+        if (cashOnly && !t.is_cash) return false;
         return true;
       })
       .sort((a, b) => {
         const diff = new Date(a.date).getTime() - new Date(b.date).getTime();
         return sortOrder === "desc" ? -diff : diff;
       });
-  }, [transactions, search, catFilter, monthFilter, sortOrder]);
+  }, [transactions, search, catFilter, monthFilter, sortOrder, cashOnly]);
 
   const totalFiltered = filtered.reduce((s, t) => s + t.amount, 0);
+  const cashTransactions = transactions.filter((t) => t.is_cash);
+  const hasCash = cashTransactions.length > 0;
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this transaction?")) return;
@@ -53,15 +58,15 @@ export default function TransactionsClient({ transactions }: Props) {
 
   function exportCSV() {
     const rows = [
-      ["Date", "Description", "Category", "Amount", "Notes"],
-      ...filtered.map((t) => [t.date, t.description, t.category, t.amount, t.notes || ""]),
+      ["Date", "Description", "Category", "Amount", "Cash", "Notes"],
+      ...filtered.map((t) => [t.date, t.description, t.category, t.amount, t.is_cash ? "yes" : "no", t.notes || ""]),
     ];
     const csv = rows.map((r) => r.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "fintrack-transactions.csv";
+    a.download = "finwin-transactions.csv";
     a.click();
   }
 
@@ -134,12 +139,27 @@ export default function TransactionsClient({ transactions }: Props) {
             <ArrowUpDown className="w-3.5 h-3.5" />
             {sortOrder === "desc" ? "Newest" : "Oldest"}
           </button>
+
+          {/* Cash filter */}
+          {hasCash && (
+            <button
+              onClick={() => setCashOnly(!cashOnly)}
+              className={`flex items-center gap-2 h-10 px-3 rounded-xl border text-sm font-medium transition-colors ${
+                cashOnly
+                  ? "bg-yellow-100 border-yellow-300 text-yellow-700 dark:bg-yellow-950/40 dark:border-yellow-800 dark:text-yellow-400"
+                  : "border-border bg-secondary/50 hover:bg-secondary"
+              }`}
+            >
+              <Coins className="w-3.5 h-3.5" />
+              Cash only
+            </button>
+          )}
         </div>
 
         {/* Summary bar */}
         <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground border-t border-border/50 pt-3">
           <span>{filtered.length} transaction{filtered.length !== 1 ? "s" : ""}</span>
-          <span className="number-font font-medium text-foreground">{formatCurrency(totalFiltered)}</span>
+          <BlurAmount value={totalFiltered} className="number-font font-medium text-foreground" />
         </div>
       </div>
 
@@ -162,10 +182,13 @@ export default function TransactionsClient({ transactions }: Props) {
                   className="flex items-center gap-4 px-6 py-4 hover:bg-secondary/30 transition-colors group"
                 >
                   <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0 relative"
                     style={{ background: meta?.lightColor }}
                   >
                     {meta?.icon}
+                    {tx.is_cash && (
+                      <span className="absolute -top-1 -right-1 text-[8px] bg-yellow-400 text-yellow-900 rounded-full px-1 font-bold leading-4">₹</span>
+                    )}
                   </div>
 
                   <div className="flex-1 min-w-0">
@@ -187,9 +210,7 @@ export default function TransactionsClient({ transactions }: Props) {
                     {new Date(tx.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "2-digit" })}
                   </div>
 
-                  <div className="number-font font-600 text-sm min-w-24 text-right">
-                    {formatCurrency(tx.amount)}
-                  </div>
+                  <BlurAmount value={tx.amount} className="number-font font-600 text-sm min-w-24 text-right" />
 
                   <button
                     onClick={() => handleDelete(tx.id)}

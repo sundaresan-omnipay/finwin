@@ -14,16 +14,21 @@ import {
   Wallet,
   Menu,
   X,
+  Eye,
+  EyeOff,
+  Gift,
 } from "lucide-react";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { useBlur } from "@/contexts/blur-context";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight },
   { href: "/dashboard/budget", label: "Budget", icon: Target },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/dashboard/wrapped", label: "Wrapped", icon: Gift },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
@@ -32,6 +37,7 @@ export default function Sidebar({ user }: { user: User }) {
   const router = useRouter();
   const supabase = createClient();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { blurred, toggle: toggleBlur } = useBlur();
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -48,7 +54,7 @@ export default function Sidebar({ user }: { user: User }) {
             <Wallet className="w-4 h-4 text-white" />
           </div>
           <div>
-            <span className="font-display text-base font-700">FinTrack</span>
+            <span className="font-display text-base font-700">FinWin</span>
             <div className="text-[10px] text-muted-foreground font-medium tracking-wide uppercase">Finance Monitor</div>
           </div>
         </div>
@@ -77,6 +83,9 @@ export default function Sidebar({ user }: { user: User }) {
                 )}
               />
               {item.label}
+              {item.href === "/dashboard/wrapped" && !active && (
+                <span className="ml-auto text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-semibold">NEW</span>
+              )}
               {active && (
                 <motion.div
                   layoutId="active-indicator"
@@ -89,7 +98,22 @@ export default function Sidebar({ user }: { user: User }) {
       </nav>
 
       {/* User section */}
-      <div className="px-4 py-4 border-t border-border/50">
+      <div className="px-4 py-4 border-t border-border/50 space-y-2">
+        {/* Privacy blur toggle */}
+        <button
+          onClick={toggleBlur}
+          className={cn(
+            "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all",
+            blurred
+              ? "bg-primary/10 text-primary border border-primary/20"
+              : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+          )}
+          title={blurred ? "Show amounts" : "Hide amounts (privacy mode)"}
+        >
+          {blurred ? <EyeOff className="w-4 h-4 flex-shrink-0" /> : <Eye className="w-4 h-4 flex-shrink-0" />}
+          <span>{blurred ? "Amounts hidden" : "Hide amounts"}</span>
+        </button>
+
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-secondary/50">
           <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
             <span className="text-xs font-600 text-primary">

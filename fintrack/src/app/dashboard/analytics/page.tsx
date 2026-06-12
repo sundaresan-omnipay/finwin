@@ -1,12 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
-import { getLast6Months } from "@/lib/utils";
+import { getLast12Months } from "@/lib/utils";
 import AnalyticsClient from "./AnalyticsClient";
 
 export default async function AnalyticsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const last6 = getLast6Months();
-  const startDate = `${last6[0]}-01`;
+
+  // Fetch 12 months to power festival spike detection
+  const last12 = getLast12Months();
+  const startDate = `${last12[0]}-01`;
 
   const { data: transactions } = await supabase
     .from("transactions")

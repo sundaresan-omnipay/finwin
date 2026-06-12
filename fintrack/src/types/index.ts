@@ -17,6 +17,26 @@ export interface Transaction {
   category: Category;
   date: string;
   notes?: string;
+  is_cash?: boolean;
+  created_at: string;
+}
+
+export interface UserSettings {
+  id: string;
+  user_id: string;
+  salary_day: number;       // 1–28
+  monthly_salary: number | null;
+  whatsapp_phone: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CashWithdrawal {
+  id: string;
+  user_id: string;
+  amount: number;
+  date: string;
+  notes?: string;
   created_at: string;
 }
 

@@ -3,19 +3,22 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Target, CheckCircle2, AlertTriangle, TrendingUp, Loader2 } from "lucide-react";
+import { Target, CheckCircle2, AlertTriangle, Loader2, Clock } from "lucide-react";
 import { Transaction, Budget, CATEGORY_META, CATEGORIES, Category } from "@/types";
-import { formatCurrency, getMonthLabel } from "@/lib/utils";
+import { formatCurrency, computeWorkHours } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { BlurAmount } from "@/components/ui/BlurAmount";
 
 interface Props {
   transactions: Transaction[];
   budgets: Budget[];
   currentMonth: string;
+  cycleLabel: string;
   userId: string;
+  monthlySalary: number | null;
 }
 
-export default function BudgetClient({ transactions, budgets, currentMonth, userId }: Props) {
+export default function BudgetClient({ transactions, budgets, currentMonth, cycleLabel, userId, monthlySalary }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const [saving, setSaving] = useState<string | null>(null);
@@ -58,15 +61,15 @@ export default function BudgetClient({ transactions, budgets, currentMonth, user
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-3xl font-700 mb-1">Budget</h1>
-        <p className="text-muted-foreground text-sm">{getMonthLabel(currentMonth)}</p>
+        <p className="text-muted-foreground text-sm">{cycleLabel}</p>
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "Total budget", value: formatCurrency(totalBudget), color: "text-violet-600" },
-          { label: "Spent so far", value: formatCurrency(totalSpent), color: totalSpent > totalBudget ? "text-red-500" : "text-foreground" },
-          { label: "Remaining", value: formatCurrency(Math.max(0, totalBudget - totalSpent)), color: totalSpent > totalBudget ? "text-red-500" : "text-emerald-600" },
+          { label: "Total budget", value: totalBudget, color: "text-violet-600" },
+          { label: "Spent so far", value: totalSpent, color: totalSpent > totalBudget ? "text-red-500" : "text-foreground" },
+          { label: "Remaining", value: Math.max(0, totalBudget - totalSpent), color: totalSpent > totalBudget ? "text-red-500" : "text-emerald-600" },
         ].map((m, i) => (
           <motion.div
             key={m.label}
@@ -76,7 +79,7 @@ export default function BudgetClient({ transactions, budgets, currentMonth, user
             className="bg-card border border-border/50 rounded-2xl p-5"
           >
             <div className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">{m.label}</div>
-            <div className={`number-font text-2xl font-600 ${m.color}`}>{m.value}</div>
+            <BlurAmount value={m.value} className={`number-font text-2xl font-600 ${m.color}`} />
           </motion.div>
         ))}
       </div>
@@ -121,6 +124,7 @@ export default function BudgetClient({ transactions, budgets, currentMonth, user
             const pct = budgetAmt > 0 ? Math.min(100, (spent / budgetAmt) * 100) : 0;
             const isOver = budgetAmt > 0 && spent > budgetAmt;
             const barColor = isOver ? "#ef4444" : pct > 70 ? "#f97316" : meta.color;
+            const workHours = monthlySalary && budgetAmt > 0 ? computeWorkHours(budgetAmt, monthlySalary) : null;
 
             return (
               <motion.div
@@ -146,6 +150,12 @@ export default function BudgetClient({ transactions, budgets, currentMonth, user
                           {formatCurrency(spent)} spent
                           {budgetAmt > 0 && ` of ${formatCurrency(budgetAmt)}`}
                         </div>
+                        {workHours !== null && (
+                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
+                            <Clock className="w-2.5 h-2.5" />
+                            {workHours}h of work
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         {isOver && <AlertTriangle className="w-4 h-4 text-red-500" />}

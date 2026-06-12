@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getMonthKey, getLast6Months } from "@/lib/utils";
+import { getMonthKey, getLast6Months, getSalaryCycleBounds } from "@/lib/utils";
 import DashboardClient from "./DashboardClient";
 
 export default async function DashboardPage() {
@@ -9,7 +9,7 @@ export default async function DashboardPage() {
   const last6 = getLast6Months();
   const startDate = `${last6[0]}-01`;
 
-  const [txResult, budgetResult] = await Promise.all([
+  const [txResult, budgetResult, settingsResult, withdrawalResult] = await Promise.all([
     supabase
       .from("transactions")
       .select("*")
@@ -20,7 +20,18 @@ export default async function DashboardPage() {
       .from("budgets")
       .select("*")
       .eq("user_id", user!.id)
-      .eq("month", currentMonth),
+      .in("month", [currentMonth, getMonthKey(new Date(new Date().setMonth(new Date().getMonth() + 1)))]),
+    supabase
+      .from("user_settings")
+      .select("*")
+      .eq("user_id", user!.id)
+      .maybeSingle(),
+    supabase
+      .from("cash_withdrawals")
+      .select("*")
+      .eq("user_id", user!.id)
+      .gte("date", startDate)
+      .order("date", { ascending: false }),
   ]);
 
   return (
@@ -29,6 +40,8 @@ export default async function DashboardPage() {
       budgets={budgetResult.data || []}
       currentMonth={currentMonth}
       userEmail={user!.email || ""}
+      userSettings={settingsResult.data || null}
+      cashWithdrawals={withdrawalResult.data || []}
     />
   );
 }

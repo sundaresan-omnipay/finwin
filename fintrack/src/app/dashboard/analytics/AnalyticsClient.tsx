@@ -4,21 +4,28 @@ import { useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  RadarChart, PolarGrid, PolarAngleAxis, Radar, Legend, Cell
+  RadarChart, PolarGrid, PolarAngleAxis, Radar,
 } from "recharts";
+import { PiggyBank, TrendingUp } from "lucide-react";
 import { Transaction, CATEGORY_META, CATEGORIES } from "@/types";
-import { formatCurrency, getLast6Months, getMonthLabel } from "@/lib/utils";
+import { formatCurrency, getLast6Months, getLast12Months, getMonthLabel } from "@/lib/utils";
 import SpendingDonut from "@/components/charts/SpendingDonut";
+import { BlurAmount } from "@/components/ui/BlurAmount";
 
 interface Props {
   transactions: Transaction[];
 }
 
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 export default function AnalyticsClient({ transactions }: Props) {
-  const months = getLast6Months();
+  const months6 = getLast6Months();
+  const months12 = getLast12Months();
+
+  const currentMonthKey = months6[months6.length - 1];
 
   const monthlyByCategory = useMemo(() => {
-    return months.map((m) => {
+    return months6.map((m) => {
       const mtxs = transactions.filter((t) => t.date.startsWith(m));
       const label = new Date(m + "-01").toLocaleDateString("en-IN", { month: "short" });
       const row: Record<string, string | number> = { month: label };
@@ -28,9 +35,8 @@ export default function AnalyticsClient({ transactions }: Props) {
       row.total = mtxs.reduce((s, t) => s + t.amount, 0);
       return row;
     });
-  }, [transactions, months]);
+  }, [transactions, months6]);
 
-  const currentMonthKey = months[months.length - 1];
   const currentTotals = useMemo(() => {
     const map: Record<string, number> = {};
     transactions.filter((t) => t.date.startsWith(currentMonthKey))
@@ -48,8 +54,9 @@ export default function AnalyticsClient({ transactions }: Props) {
 
   const avgByCategory = useMemo(() => {
     return CATEGORIES.map((c) => {
-      const total = transactions.filter((t) => t.category === c).reduce((s, t) => s + t.amount, 0);
-      const count = transactions.filter((t) => t.category === c).length;
+      const catTxs = transactions.filter((t) => t.category === c);
+      const total = catTxs.reduce((s, t) => s + t.amount, 0);
+      const count = catTxs.length;
       return {
         category: CATEGORY_META[c].label,
         icon: CATEGORY_META[c].icon,
@@ -71,12 +78,93 @@ export default function AnalyticsClient({ transactions }: Props) {
       .map(([date, amount]) => ({ date, amount }));
   }, [transactions]);
 
+  // --- Festival sinking funds (Feature 3 / Phase 4) ---
+  const festivalSuggestions = useMemo(() => {
+    const today = new Date();
+    const currentMonthIdx = today.getMonth(); // 0-based
+
+    // Monthly totals for all 12 months
+    const monthlyTotals = months12.map((m) => ({
+      month: m,
+      total: transactions.filter((t) => t.date.startsWith(m)).reduce((s, t) => s + t.amount, 0),
+      monthIdx: new Date(m + "-01").getMonth(),
+    }));
+
+    // Average of recent 6 months (exclude last 6 "prior year" months)
+    const recent6Totals = monthlyTotals.slice(6).map((m) => m.total);
+    const recentAvg = recent6Totals.length > 0
+      ? recent6Totals.reduce((s, v) => s + v, 0) / recent6Totals.length
+      : 0;
+
+    if (recentAvg === 0) return [];
+
+    // Prior 6 months = months 0-5 in our 12-month window (same months last year)
+    const priorYear = monthlyTotals.slice(0, 6);
+    const spikes = priorYear.filter((m) => m.total > recentAvg * 1.35 && m.total > 0);
+
+    return spikes.map((spike) => {
+      const extra = spike.total - recentAvg;
+      // Find how many months until this calendar month comes around again
+      let monthsUntil = ((spike.monthIdx - currentMonthIdx + 12) % 12);
+      if (monthsUntil === 0) monthsUntil = 12; // same month next year
+      const monthlySave = monthsUntil > 0 ? extra / monthsUntil : extra;
+      const monthName = MONTH_NAMES[spike.monthIdx];
+
+      return {
+        monthName,
+        monthIdx: spike.monthIdx,
+        lastYearSpend: spike.total,
+        extra,
+        monthsUntil,
+        monthlySave: Math.ceil(monthlySave / 100) * 100, // round to nearest ₹100
+      };
+    }).sort((a, b) => a.monthsUntil - b.monthsUntil);
+  }, [transactions, months12]);
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-3xl font-700 mb-1">Analytics</h1>
         <p className="text-muted-foreground text-sm">Deep dive into your spending patterns</p>
       </div>
+
+      {/* Festival sinking funds (Feature 3 — Phase 4) */}
+      {festivalSuggestions.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 border border-amber-200 dark:border-amber-900/50 rounded-2xl p-6"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <PiggyBank className="w-5 h-5 text-amber-600" />
+            <h3 className="font-display text-base font-600 text-amber-800 dark:text-amber-300">Festival & seasonal sinking funds</h3>
+          </div>
+          <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mb-5">
+            Based on your spending last year, these months had big spikes. Start saving now so the bump doesn&apos;t hit your budget.
+          </p>
+          <div className="grid sm:grid-cols-2 gap-4">
+            {festivalSuggestions.map((s) => (
+              <div key={s.monthName} className="bg-white/60 dark:bg-amber-950/30 rounded-xl p-4 border border-amber-100 dark:border-amber-900/40">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold text-sm text-amber-800 dark:text-amber-200">{s.monthName}</span>
+                  <span className="text-xs text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded-full">
+                    {s.monthsUntil} months away
+                  </span>
+                </div>
+                <div className="text-xs text-amber-700/70 dark:text-amber-400/70 mb-3">
+                  Last {s.monthName} you spent <span className="font-semibold">{formatCurrency(s.lastYearSpend)}</span> — <span className="font-semibold">{formatCurrency(s.extra)}</span> above average
+                </div>
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-3.5 h-3.5 text-amber-600" />
+                  <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                    Save <BlurAmount value={s.monthlySave} className="inline" />/month from now
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* Monthly stacked */}
       <motion.div
@@ -160,7 +248,7 @@ export default function AnalyticsClient({ transactions }: Props) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm font-medium">{d.category}</span>
-                    <span className="number-font text-sm font-600">{formatCurrency(d.total)}</span>
+                    <BlurAmount value={d.total} className="number-font text-sm font-600" />
                   </div>
                   <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                     <motion.div
@@ -202,7 +290,7 @@ export default function AnalyticsClient({ transactions }: Props) {
                   {new Date(d.date).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
                 </div>
               </div>
-              <div className="number-font font-600 text-sm">{formatCurrency(d.amount)}</div>
+              <BlurAmount value={d.amount} className="number-font font-600 text-sm" />
             </div>
           ))}
           {topSpendDays.length === 0 && (
