@@ -7,6 +7,8 @@ export type Category =
   | "entertainment"
   | "travel"
   | "education"
+  | "savings"
+  | "emi"
   | "other";
 
 export interface Transaction {
@@ -114,6 +116,20 @@ export const CATEGORY_META: Record<Category, CategoryMeta> = {
     lightColor: "#f5f3ff",
     textColor: "#6d28d9",
   },
+  savings: {
+    label: "SIP & Savings",
+    icon: "📈",
+    color: "#10b981",
+    lightColor: "#ecfdf5",
+    textColor: "#065f46",
+  },
+  emi: {
+    label: "Loan EMI",
+    icon: "🏦",
+    color: "#6366f1",
+    lightColor: "#eef2ff",
+    textColor: "#3730a3",
+  },
   other: {
     label: "Other",
     icon: "📦",
@@ -122,5 +138,31 @@ export const CATEGORY_META: Record<Category, CategoryMeta> = {
     textColor: "#374151",
   },
 };
+
+export interface Sip {
+  id: string;
+  user_id: string;
+  fund_name: string;
+  monthly_amount: number;
+  sip_day: number;
+  start_date: string;
+  is_active: boolean;
+  notes?: string;
+  created_at: string;
+}
+
+export interface Loan {
+  id: string;
+  user_id: string;
+  loan_name: string;
+  principal_amount: number;
+  emi_amount: number;
+  annual_interest_rate: number;
+  tenure_months: number;
+  start_date: string;
+  is_active: boolean;
+  notes?: string;
+  created_at: string;
+}
 
 export const CATEGORIES = Object.keys(CATEGORY_META) as Category[];

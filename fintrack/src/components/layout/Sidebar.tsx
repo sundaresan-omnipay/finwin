@@ -17,6 +17,8 @@ import {
   Eye,
   EyeOff,
   Gift,
+  TrendingUp,
+  Building2,
 } from "lucide-react";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -28,6 +30,8 @@ const navItems = [
   { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight },
   { href: "/dashboard/budget", label: "Budget", icon: Target },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/dashboard/savings", label: "SIP Savings", icon: TrendingUp },
+  { href: "/dashboard/loans", label: "Loans", icon: Building2 },
   { href: "/dashboard/wrapped", label: "Wrapped", icon: Gift },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
