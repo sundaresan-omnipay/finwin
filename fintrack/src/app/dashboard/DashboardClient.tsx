@@ -64,28 +64,36 @@ export default function DashboardClient({
     })
     .reduce((s, t) => s + t.amount, 0),
   [monthTxs]);
-  const prevMonthTotal = useMemo(() => prevMonthTxs.reduce((s, t) => s + t.amount, 0), [prevMonthTxs]);
+  const isSipOrEmi = (t: Transaction) => {
+    const desc = (t.description || "").toLowerCase();
+    return desc.startsWith("sip:") || desc.startsWith("emi:") || t.category === "savings" || t.category === "emi";
+  };
+
+  const prevDayToDaySpent = useMemo(
+    () => prevMonthTxs.filter((t) => !isSipOrEmi(t)).reduce((s, t) => s + t.amount, 0),
+    [prevMonthTxs]
+  );
 
   const budgetForCycle = useMemo(
     () => budgets.filter((b) => b.month === cycle.monthKey),
     [budgets, cycle]
   );
   const totalBudget = useMemo(() => budgetForCycle.reduce((s, b) => s + b.amount, 0), [budgetForCycle]);
-  const remaining = totalBudget - totalSpent;
-  const budgetPct = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
+  const remaining = totalBudget - dayToDaySpent;
+  const budgetPct = totalBudget > 0 ? (dayToDaySpent / totalBudget) * 100 : 0;
 
   const today = new Date().toISOString().split("T")[0];
   const todaySpent = useMemo(
-    () => transactions.filter((t) => t.date === today).reduce((s, t) => s + t.amount, 0),
+    () => transactions.filter((t) => t.date === today && !isSipOrEmi(t)).reduce((s, t) => s + t.amount, 0),
     [transactions, today]
   );
 
   const monthChange =
-    prevMonthTotal > 0 ? ((totalSpent - prevMonthTotal) / prevMonthTotal) * 100 : 0;
+    prevDayToDaySpent > 0 ? ((dayToDaySpent - prevDayToDaySpent) / prevDayToDaySpent) * 100 : 0;
 
   const categoryTotals = useMemo(() => {
     const map: Record<string, number> = {};
-    monthTxs.forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
+    monthTxs.filter((t) => !isSipOrEmi(t)).forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
     return map;
   }, [monthTxs]);
 
@@ -147,80 +155,6 @@ export default function DashboardClient({
     return { smallSpends, smallTotal, subscriptions, subscriptionTotal };
   }, [monthTxs, transactions]);
 
-  // --- Smart suggestions ---
-  const suggestions = useMemo(() => {
-    const tips: Array<{ title: string; description: string; type: "warning" | "success" | "info" }> = [];
-
-    if (budgetPct > 90) {
-      tips.push({
-        title: "Almost at your budget limit!",
-        description: `You've used ${budgetPct.toFixed(0)}% of your budget. ${cycle.daysLeft} days left in this pay cycle.`,
-        type: "warning",
-      });
-    }
-
-    if (topCategory) {
-      const catBudget = budgetForCycle.find((b) => b.category === topCategory.cat);
-      if (catBudget && topCategory.amt > catBudget.amount) {
-        tips.push({
-          title: `${topCategory.meta?.label} budget exceeded`,
-          description: `Spent ${formatCurrency(topCategory.amt)} — ${formatCurrency(topCategory.amt - catBudget.amount)} over the ${formatCurrency(catBudget.amount)} limit.`,
-          type: "warning",
-        });
-      }
-    }
-
-    if (moneyLeaks.smallTotal > 1000) {
-      tips.push({
-        title: `${moneyLeaks.smallSpends.length} small spends = ${formatCurrency(moneyLeaks.smallTotal)}`,
-        description: "Individually invisible, collectively brutal. Chai, auto, quick buys under ₹200.",
-        type: "info",
-      });
-    }
-
-    if (moneyLeaks.subscriptions.length > 0) {
-      tips.push({
-        title: `${moneyLeaks.subscriptions.length} recurring subscriptions detected`,
-        description: `${moneyLeaks.subscriptions.map((s) => s.description).join(", ")} — ${formatCurrency(moneyLeaks.subscriptionTotal)}/mo total.`,
-        type: "info",
-      });
-    }
-
-    if (monthChange > 15) {
-      tips.push({
-        title: `Spending up ${monthChange.toFixed(0)}% vs last cycle`,
-        description: `${formatCurrency(totalSpent)} this cycle vs ${formatCurrency(prevMonthTotal)} last cycle.`,
-        type: "info",
-      });
-    }
-
-    if (monthChange < -10 && totalSpent > 0) {
-      tips.push({
-        title: "Great job cutting spending!",
-        description: `Spending ${Math.abs(monthChange).toFixed(0)}% less than last cycle. Saved ${formatCurrency(prevMonthTotal - totalSpent)}.`,
-        type: "success",
-      });
-    }
-
-    if (streak.current >= 3) {
-      tips.push({
-        title: `${streak.current}-day no-spend streak! 🔥`,
-        description: `Zero discretionary spending for the last ${streak.current} days. Keep it up!`,
-        type: "success",
-      });
-    }
-
-    if (!tips.length && totalSpent > 0) {
-      tips.push({
-        title: "Looking good this cycle",
-        description: "Your spending is within normal range. Keep tracking to build better habits.",
-        type: "success",
-      });
-    }
-
-    return tips.slice(0, 3);
-  }, [budgetPct, topCategory, monthChange, totalSpent, prevMonthTotal, budgetForCycle, cycle, moneyLeaks, streak]);
-
   const daysInCycle = useMemo(() => {
     const start = new Date(cycle.start);
     const end = new Date(cycle.end);
@@ -228,14 +162,128 @@ export default function DashboardClient({
   }, [cycle]);
 
   const daysElapsed = daysInCycle - cycle.daysLeft;
-  const dailyAvg = daysElapsed > 0 ? totalSpent / daysElapsed : 0;
+  const dailyAvg = daysElapsed > 0 ? dayToDaySpent / daysElapsed : 0;
+
+  // --- Smart insights (finance-grade) ---
+  const suggestions = useMemo(() => {
+    const tips: Array<{ title: string; description: string; type: "warning" | "success" | "info" }> = [];
+
+    // 1. Spending projection vs budget
+    if (totalBudget > 0 && daysElapsed > 0) {
+      const projected = (dayToDaySpent / daysElapsed) * daysInCycle;
+      if (projected > totalBudget * 1.05) {
+        tips.push({
+          title: "On track to overspend",
+          description: `At ₹${formatCurrency(dailyAvg)}/day avg, you'll hit ${formatCurrency(projected)} by cycle end — ${formatCurrency(projected - totalBudget)} over your ${formatCurrency(totalBudget)} budget.`,
+          type: "warning",
+        });
+      } else if (projected < totalBudget * 0.85 && dayToDaySpent > 0) {
+        tips.push({
+          title: "Well within budget",
+          description: `Projected ${formatCurrency(projected)} by month end — ${formatCurrency(totalBudget - projected)} under your ${formatCurrency(totalBudget)} budget. Good discipline.`,
+          type: "success",
+        });
+      }
+    }
+
+    // 2. EMI burden (only if salary known)
+    if (monthlySalary && totalEmiMonthly > 0) {
+      const emiBurden = (totalEmiMonthly / monthlySalary) * 100;
+      if (emiBurden > 50) {
+        tips.push({
+          title: `High EMI burden: ${emiBurden.toFixed(0)}% of salary`,
+          description: `${formatCurrency(totalEmiMonthly)}/month on loan EMIs. Above 50% is financially stressful — consider prepayment when you have surplus.`,
+          type: "warning",
+        });
+      } else {
+        tips.push({
+          title: `EMI load: ${emiBurden.toFixed(0)}% of salary`,
+          description: `${formatCurrency(totalEmiMonthly)}/month on loans — within healthy range (ideal: under 40%). Keep EMIs prioritised.`,
+          type: "info",
+        });
+      }
+    }
+
+    // 3. Savings rate
+    if (monthlySalary && totalSipMonthly > 0) {
+      const rate = (totalSipMonthly / monthlySalary) * 100;
+      if (rate >= 20) {
+        tips.push({
+          title: `Strong savings: ${rate.toFixed(0)}% of salary`,
+          description: `${formatCurrency(totalSipMonthly)}/month into SIPs. You're in the top tier — most people invest under 10%.`,
+          type: "success",
+        });
+      } else if (rate >= 10) {
+        tips.push({
+          title: `Savings rate: ${rate.toFixed(0)}% of salary`,
+          description: `${formatCurrency(totalSipMonthly)}/month in SIPs — solid start. Target 20%+ to build real long-term wealth.`,
+          type: "info",
+        });
+      } else {
+        tips.push({
+          title: `Low savings rate: ${rate.toFixed(0)}%`,
+          description: `Only ${formatCurrency(totalSipMonthly)}/month in SIPs. Financial planners recommend 20-30% of income for wealth creation.`,
+          type: "warning",
+        });
+      }
+    }
+
+    // 4. Budget category exceeded
+    if (topCategory) {
+      const catBudget = budgetForCycle.find((b) => b.category === topCategory.cat);
+      if (catBudget && topCategory.amt > catBudget.amount) {
+        tips.push({
+          title: `${topCategory.meta?.label} over budget`,
+          description: `Spent ${formatCurrency(topCategory.amt)} vs ${formatCurrency(catBudget.amount)} limit — ${formatCurrency(topCategory.amt - catBudget.amount)} over. Tighten up for the rest of the cycle.`,
+          type: "warning",
+        });
+      }
+    }
+
+    // 5. No-spend streak
+    if (streak.current >= 3) {
+      tips.push({
+        title: `${streak.current}-day no-spend streak`,
+        description: `No discretionary spending for ${streak.current} consecutive days. Every such day compounds your savings.`,
+        type: "success",
+      });
+    }
+
+    // 6. Small spends leakage
+    if (moneyLeaks.smallTotal > 500) {
+      tips.push({
+        title: `${moneyLeaks.smallSpends.length} micro-spends = ${formatCurrency(moneyLeaks.smallTotal)}`,
+        description: "Small transactions under ₹200 add up silently. Cutting 3-4 of these daily can free ₹1,500+ a month.",
+        type: "info",
+      });
+    }
+
+    // 7. Month-over-month
+    if (monthChange > 20 && dayToDaySpent > 0) {
+      tips.push({
+        title: `Spending up ${monthChange.toFixed(0)}% vs last cycle`,
+        description: `${formatCurrency(dayToDaySpent)} this cycle vs ${formatCurrency(prevDayToDaySpent)} last cycle. Review what changed.`,
+        type: "warning",
+      });
+    }
+
+    if (!tips.length) {
+      tips.push({
+        title: "Tracking is working",
+        description: "Add more transactions to get personalised financial insights here.",
+        type: "info",
+      });
+    }
+
+    return tips.slice(0, 3);
+  }, [budgetPct, topCategory, monthChange, dayToDaySpent, prevDayToDaySpent, budgetForCycle, cycle, moneyLeaks, streak, monthlySalary, totalEmiMonthly, totalSipMonthly, totalBudget, daysElapsed, daysInCycle, dailyAvg]);
 
   const firstName = userEmail.split("@")[0];
 
   const metrics = [
     {
       label: "Spent this cycle",
-      value: <BlurAmount value={totalSpent} className="number-font text-2xl font-600" />,
+      value: <BlurAmount value={dayToDaySpent} className="number-font text-2xl font-600" />,
       sub: cycle.label,
       icon: Wallet,
       color: "text-violet-600",

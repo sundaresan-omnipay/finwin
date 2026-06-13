@@ -56,7 +56,9 @@ function monthsPaid(loan: Loan): number {
   const start = new Date(loan.start_date);
   const now = new Date();
   const diff = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
-  return Math.min(Math.max(0, diff), loan.tenure_months);
+  // Include current month if we're on or past the EMI date
+  const paid = now >= start ? diff + 1 : diff;
+  return Math.min(Math.max(0, paid), loan.tenure_months);
 }
 
 const emptyForm = {
