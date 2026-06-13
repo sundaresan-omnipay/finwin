@@ -3,17 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, Loader2, ChevronDown, ChevronUp, CheckCircle2, Pencil, Trash2 } from "lucide-react";
+import { Plus, X, Loader2, ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Loan } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { BlurAmount } from "@/components/ui/BlurAmount";
 
-interface TxnSnap { id: string; description: string; amount: number; date: string; }
-
 interface Props {
   loans: Loan[];
-  currentMonthTxns: TxnSnap[];
   userId: string;
 }
 
@@ -67,14 +64,13 @@ const emptyForm = {
   annual_interest_rate: "", tenure_months: "", start_date: new Date().toISOString().split("T")[0], notes: "",
 };
 
-export default function LoanClient({ loans, currentMonthTxns, userId }: Props) {
+export default function LoanClient({ loans, userId }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const [open, setOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
-  const [markingId, setMarkingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [scheduleLimit, setScheduleLimit] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
@@ -88,11 +84,6 @@ export default function LoanClient({ loans, currentMonthTxns, userId }: Props) {
     const row = schedule[paid - 1];
     return sum + (row ? row.outstanding : loan.principal_amount);
   }, 0);
-
-  function isPaidThisMonth(loan: Loan) {
-    const key = `EMI: ${loan.loan_name}`;
-    return currentMonthTxns.some((t) => t.description === key);
-  }
 
   function openAdd() {
     setEditingLoan(null);
@@ -142,21 +133,6 @@ export default function LoanClient({ loans, currentMonthTxns, userId }: Props) {
     setLoading(false);
   }
 
-  async function handleMarkPaid(loan: Loan) {
-    setMarkingId(loan.id);
-    const today = new Date().toISOString().split("T")[0];
-    const { error: err } = await supabase.from("transactions").insert({
-      user_id: userId,
-      description: `EMI: ${loan.loan_name}`,
-      amount: loan.emi_amount,
-      category: "emi",
-      date: today,
-      notes: "Loan EMI payment",
-    });
-    if (!err) router.refresh();
-    setMarkingId(null);
-  }
-
   async function handleDelete(loan: Loan) {
     if (!confirm(`Delete "${loan.loan_name}"? This won't remove past transactions.`)) return;
     await supabase.from("loans").delete().eq("id", loan.id);
@@ -181,16 +157,10 @@ export default function LoanClient({ loans, currentMonthTxns, userId }: Props) {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {[
-          { label: "Monthly EMI total", value: <BlurAmount value={totalMonthlyEmi} className="number-font text-2xl font-700 text-white" />, sub: `${activeLoans.length} active loan${activeLoans.length !== 1 ? "s" : ""}`, icon: "📅", color: "from-indigo-500 to-purple-600" },
+          { label: "Monthly EMI total", value: <BlurAmount value={totalMonthlyEmi} className="number-font text-2xl font-700 text-white" />, sub: `${activeLoans.length} active loan${activeLoans.length !== 1 ? "s" : ""} · auto-deducted`, icon: "📅", color: "from-indigo-500 to-purple-600" },
           { label: "Total outstanding", value: <BlurAmount value={totalOutstanding} className="number-font text-2xl font-700 text-white" />, sub: "Across all loans", icon: "🏦", color: "from-rose-500 to-pink-600" },
-          {
-            label: "Paid this month",
-            value: <span className="number-font text-2xl font-700 text-white">{activeLoans.filter(isPaidThisMonth).length} / {activeLoans.length}</span>,
-            sub: activeLoans.filter(isPaidThisMonth).length === activeLoans.length && activeLoans.length > 0 ? "All EMIs paid ✓" : `${activeLoans.length - activeLoans.filter(isPaidThisMonth).length} remaining`,
-            icon: "✅", color: "from-amber-500 to-orange-600",
-          },
         ].map((card, i) => (
           <motion.div key={card.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
             className={`rounded-2xl p-5 bg-gradient-to-br ${card.color} text-white relative overflow-hidden`}>
@@ -220,7 +190,6 @@ export default function LoanClient({ loans, currentMonthTxns, userId }: Props) {
             const currentRow = schedule[paid] ?? schedule[schedule.length - 1];
             const outstanding = currentRow ? currentRow.outstanding : 0;
             const progressPct = Math.round((paid / loan.tenure_months) * 100);
-            const isPaid = isPaidThisMonth(loan);
             const limit = scheduleLimit[loan.id] ?? 12;
             const isExpanded = expandedId === loan.id;
             const remaining = loan.tenure_months - paid;
@@ -229,7 +198,7 @@ export default function LoanClient({ loans, currentMonthTxns, userId }: Props) {
 
             return (
               <motion.div key={loan.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                className={`bg-card border rounded-2xl overflow-hidden transition-all ${isPaid ? "border-indigo-300/50 dark:border-indigo-800/50" : "border-border/50"}`}>
+                className="bg-card border border-border/50 rounded-2xl overflow-hidden transition-all">
 
                 {/* Loan header */}
                 <div className="p-5">
@@ -240,7 +209,7 @@ export default function LoanClient({ loans, currentMonthTxns, userId }: Props) {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-sm">{loan.loan_name}</span>
                           {!loan.is_active && <span className="text-[10px] bg-secondary text-muted-foreground px-2 py-0.5 rounded-full">Closed</span>}
-                          {isPaid && loan.is_active && <span className="text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400 px-2 py-0.5 rounded-full font-medium">EMI paid ✓</span>}
+                          {loan.is_active && <span className="text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400 px-2 py-0.5 rounded-full font-medium">Auto-deducted</span>}
                         </div>
                         <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                           <div>Principal: <BlurAmount value={loan.principal_amount ?? 0} className="font-medium" /> · Rate: <span className="font-medium">{loan.annual_interest_rate ?? 0}% p.a.</span></div>
@@ -257,13 +226,6 @@ export default function LoanClient({ loans, currentMonthTxns, userId }: Props) {
                       <BlurAmount value={loan.emi_amount} className="number-font text-lg font-700" />
                       <span className="text-xs text-muted-foreground -mt-1">EMI / month</span>
                       <div className="flex items-center gap-2 mt-1">
-                        {loan.is_active && !isPaid && remaining > 0 && (
-                          <button onClick={() => handleMarkPaid(loan)} disabled={markingId === loan.id}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 transition-all disabled:opacity-60">
-                            {markingId === loan.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                            Mark paid
-                          </button>
-                        )}
                         <button onClick={() => openEdit(loan)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
                         <button onClick={() => handleDelete(loan)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>

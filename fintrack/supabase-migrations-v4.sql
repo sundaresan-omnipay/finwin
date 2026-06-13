@@ -61,6 +61,11 @@ CREATE TABLE IF NOT EXISTS goals (
 
 ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view own goals"   ON goals;
+DROP POLICY IF EXISTS "Users can insert own goals" ON goals;
+DROP POLICY IF EXISTS "Users can update own goals" ON goals;
+DROP POLICY IF EXISTS "Users can delete own goals" ON goals;
+
 CREATE POLICY "Users can view own goals"   ON goals FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own goals" ON goals FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update own goals" ON goals FOR UPDATE USING (auth.uid() = user_id);

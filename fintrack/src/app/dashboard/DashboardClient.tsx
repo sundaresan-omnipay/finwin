@@ -55,6 +55,15 @@ export default function DashboardClient({
   );
 
   const totalSpent = useMemo(() => monthTxs.reduce((s, t) => s + t.amount, 0), [monthTxs]);
+
+  // Exclude SIP/EMI transactions from day-to-day spending (they're tracked separately)
+  const dayToDaySpent = useMemo(() => monthTxs
+    .filter((t) => {
+      const desc = (t.description || "").toLowerCase();
+      return !desc.startsWith("sip:") && !desc.startsWith("emi:") && t.category !== "savings" && t.category !== "emi";
+    })
+    .reduce((s, t) => s + t.amount, 0),
+  [monthTxs]);
   const prevMonthTotal = useMemo(() => prevMonthTxs.reduce((s, t) => s + t.amount, 0), [prevMonthTxs]);
 
   const budgetForCycle = useMemo(
@@ -349,100 +358,79 @@ export default function DashboardClient({
       </div>
 
       {/* Salary breakdown */}
-      {monthlySalary && monthlySalary > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.18 }}
-          className="bg-card border border-border/50 rounded-2xl p-6"
-        >
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h3 className="font-display text-base font-600">Salary breakdown</h3>
-              <p className="text-xs text-muted-foreground">Where your money goes this cycle</p>
+      {monthlySalary && monthlySalary > 0 && (() => {
+        const totalOut   = dayToDaySpent + totalSipMonthly + totalEmiMonthly;
+        const freeAmount = monthlySalary - totalOut;
+        const isOver     = freeAmount < 0;
+
+        const rows = [
+          { label: "Daily expenses", sub: "Food, transport, shopping...", value: dayToDaySpent, color: "bg-violet-500", lightBg: "bg-violet-50 dark:bg-violet-950/20" },
+          ...(totalSipMonthly > 0 ? [{ label: "SIP investments", sub: "Mutual funds, auto-deducted", value: totalSipMonthly, color: "bg-emerald-500", lightBg: "bg-emerald-50 dark:bg-emerald-950/20" }] : []),
+          ...(totalEmiMonthly > 0 ? [{ label: "Loan EMIs", sub: "Home / car / personal loan", value: totalEmiMonthly, color: "bg-rose-500", lightBg: "bg-rose-50 dark:bg-rose-950/20" }] : []),
+        ];
+
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.18 }}
+            className="bg-card border border-border/50 rounded-2xl overflow-hidden"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-secondary/30">
+              <div>
+                <h3 className="font-display text-base font-600">Monthly breakdown</h3>
+                <p className="text-xs text-muted-foreground">Where your salary goes</p>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-0.5">Take-home salary</div>
+                <BlurAmount value={monthlySalary} className="number-font text-xl font-700" />
+              </div>
             </div>
-            <BlurAmount value={monthlySalary} className="number-font text-lg font-700 text-muted-foreground" />
-          </div>
 
-          {(() => {
-            const spentPct   = Math.min((totalSpent / monthlySalary) * 100, 100);
-            const sipPct     = Math.min((totalSipMonthly / monthlySalary) * 100, 100);
-            const emiPct     = Math.min((totalEmiMonthly / monthlySalary) * 100, 100);
-            const usedPct    = Math.min(spentPct + sipPct + emiPct, 100);
-            const freePct    = Math.max(100 - usedPct, 0);
-            const freeAmount = Math.max(monthlySalary - totalSpent - totalSipMonthly - totalEmiMonthly, 0);
-            const overBy     = totalSpent + totalSipMonthly + totalEmiMonthly - monthlySalary;
-
-            return (
-              <>
-                {/* Stacked bar */}
-                <div className="h-3 rounded-full bg-secondary overflow-hidden flex mb-5 gap-px">
-                  {spentPct > 0 && <div style={{ width: `${spentPct}%` }} className="bg-violet-500 rounded-l-full transition-all" />}
-                  {sipPct > 0   && <div style={{ width: `${sipPct}%` }}   className="bg-emerald-500 transition-all" />}
-                  {emiPct > 0   && <div style={{ width: `${emiPct}%` }}   className="bg-rose-500 transition-all" />}
-                  {freePct > 0  && <div style={{ width: `${freePct}%` }}  className="bg-secondary rounded-r-full transition-all" />}
-                </div>
-
-                {/* Legend + amounts */}
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-violet-500 flex-shrink-0" />
-                      <span className="text-muted-foreground">Day-to-day spending</span>
+            {/* Rows */}
+            <div className="divide-y divide-border/40">
+              {rows.map((row) => {
+                const pct = monthlySalary > 0 ? Math.min((row.value / monthlySalary) * 100, 100) : 0;
+                return (
+                  <div key={row.label} className="flex items-center gap-4 px-6 py-4">
+                    <div className={`w-9 h-9 rounded-xl ${row.lightBg} flex items-center justify-center flex-shrink-0`}>
+                      <div className={`w-3 h-3 rounded-full ${row.color}`} />
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground/60 tabular-nums">{spentPct.toFixed(0)}%</span>
-                      <BlurAmount value={totalSpent} className="number-font font-600 tabular-nums" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">{row.label}</div>
+                      <div className="text-xs text-muted-foreground">{row.sub}</div>
+                      <div className="mt-1.5 h-1.5 bg-secondary rounded-full overflow-hidden w-full">
+                        <div className={`h-full ${row.color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <BlurAmount value={row.value} className="number-font text-sm font-700 tabular-nums" />
+                      <div className="text-[10px] text-muted-foreground tabular-nums mt-0.5">{pct.toFixed(0)}% of salary</div>
                     </div>
                   </div>
+                );
+              })}
+            </div>
 
-                  {totalSipMonthly > 0 && (
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                        <span className="text-muted-foreground">SIP investments</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground/60 tabular-nums">{sipPct.toFixed(0)}%</span>
-                        <BlurAmount value={totalSipMonthly} className="number-font font-600 tabular-nums" />
-                      </div>
-                    </div>
-                  )}
-
-                  {totalEmiMonthly > 0 && (
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-2.5 h-2.5 rounded-full bg-rose-500 flex-shrink-0" />
-                        <span className="text-muted-foreground">Loan EMIs</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground/60 tabular-nums">{emiPct.toFixed(0)}%</span>
-                        <BlurAmount value={totalEmiMonthly} className="number-font font-600 tabular-nums" />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="border-t border-border/50 pt-2.5 flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${overBy > 0 ? "bg-red-500" : "bg-slate-300 dark:bg-slate-600"}`} />
-                      <span className={`font-medium ${overBy > 0 ? "text-red-500" : "text-foreground"}`}>
-                        {overBy > 0 ? "Over salary" : "Free to spend"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground/60 tabular-nums">{freePct.toFixed(0)}%</span>
-                      <BlurAmount
-                        value={overBy > 0 ? overBy : freeAmount}
-                        className={`number-font font-700 tabular-nums ${overBy > 0 ? "text-red-500" : "text-emerald-600"}`}
-                      />
-                    </div>
-                  </div>
+            {/* Free to spend */}
+            <div className={`flex items-center justify-between px-6 py-4 border-t-2 ${isOver ? "border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/10" : "border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/10"}`}>
+              <div>
+                <div className={`text-sm font-700 ${isOver ? "text-red-600" : "text-emerald-700 dark:text-emerald-400"}`}>
+                  {isOver ? "⚠ Over salary" : "✓ Free to spend"}
                 </div>
-              </>
-            );
-          })()}
-        </motion.div>
-      )}
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {isOver ? `₹${Math.abs(freeAmount).toLocaleString("en-IN")} more than your salary` : "Unallocated this cycle"}
+                </div>
+              </div>
+              <BlurAmount
+                value={Math.abs(freeAmount)}
+                className={`number-font text-2xl font-700 tabular-nums ${isOver ? "text-red-600" : "text-emerald-600"}`}
+              />
+            </div>
+          </motion.div>
+        );
+      })()}
 
       {/* Cash wallet banner (Feature 2) */}
       {cashWithdrawals.length > 0 && (
