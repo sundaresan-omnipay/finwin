@@ -86,7 +86,7 @@ export default function SavingsClient({ sips, currentMonthTxns, userId }: Props)
       user_id: userId,
       description: `SIP: ${sip.fund_name}`,
       amount: sip.monthly_amount,
-      category: "savings",
+      category: "other",
       date: today,
       notes: "SIP investment",
     });

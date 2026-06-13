@@ -23,6 +23,8 @@ interface Props {
   userEmail: string;
   userSettings: UserSettings | null;
   cashWithdrawals: CashWithdrawal[];
+  totalSipMonthly: number;
+  totalEmiMonthly: number;
 }
 
 export default function DashboardClient({
@@ -32,6 +34,8 @@ export default function DashboardClient({
   userEmail,
   userSettings,
   cashWithdrawals,
+  totalSipMonthly,
+  totalEmiMonthly,
 }: Props) {
   const salaryDay = userSettings?.salary_day ?? 1;
   const monthlySalary = userSettings?.monthly_salary ?? null;
@@ -343,6 +347,102 @@ export default function DashboardClient({
           </motion.div>
         ))}
       </div>
+
+      {/* Salary breakdown */}
+      {monthlySalary && monthlySalary > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+          className="bg-card border border-border/50 rounded-2xl p-6"
+        >
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="font-display text-base font-600">Salary breakdown</h3>
+              <p className="text-xs text-muted-foreground">Where your money goes this cycle</p>
+            </div>
+            <BlurAmount value={monthlySalary} className="number-font text-lg font-700 text-muted-foreground" />
+          </div>
+
+          {(() => {
+            const spentPct   = Math.min((totalSpent / monthlySalary) * 100, 100);
+            const sipPct     = Math.min((totalSipMonthly / monthlySalary) * 100, 100);
+            const emiPct     = Math.min((totalEmiMonthly / monthlySalary) * 100, 100);
+            const usedPct    = Math.min(spentPct + sipPct + emiPct, 100);
+            const freePct    = Math.max(100 - usedPct, 0);
+            const freeAmount = Math.max(monthlySalary - totalSpent - totalSipMonthly - totalEmiMonthly, 0);
+            const overBy     = totalSpent + totalSipMonthly + totalEmiMonthly - monthlySalary;
+
+            return (
+              <>
+                {/* Stacked bar */}
+                <div className="h-3 rounded-full bg-secondary overflow-hidden flex mb-5 gap-px">
+                  {spentPct > 0 && <div style={{ width: `${spentPct}%` }} className="bg-violet-500 rounded-l-full transition-all" />}
+                  {sipPct > 0   && <div style={{ width: `${sipPct}%` }}   className="bg-emerald-500 transition-all" />}
+                  {emiPct > 0   && <div style={{ width: `${emiPct}%` }}   className="bg-rose-500 transition-all" />}
+                  {freePct > 0  && <div style={{ width: `${freePct}%` }}  className="bg-secondary rounded-r-full transition-all" />}
+                </div>
+
+                {/* Legend + amounts */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-violet-500 flex-shrink-0" />
+                      <span className="text-muted-foreground">Day-to-day spending</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground/60 tabular-nums">{spentPct.toFixed(0)}%</span>
+                      <BlurAmount value={totalSpent} className="number-font font-600 tabular-nums" />
+                    </div>
+                  </div>
+
+                  {totalSipMonthly > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                        <span className="text-muted-foreground">SIP investments</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground/60 tabular-nums">{sipPct.toFixed(0)}%</span>
+                        <BlurAmount value={totalSipMonthly} className="number-font font-600 tabular-nums" />
+                      </div>
+                    </div>
+                  )}
+
+                  {totalEmiMonthly > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-2.5 h-2.5 rounded-full bg-rose-500 flex-shrink-0" />
+                        <span className="text-muted-foreground">Loan EMIs</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground/60 tabular-nums">{emiPct.toFixed(0)}%</span>
+                        <BlurAmount value={totalEmiMonthly} className="number-font font-600 tabular-nums" />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="border-t border-border/50 pt-2.5 flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${overBy > 0 ? "bg-red-500" : "bg-slate-300 dark:bg-slate-600"}`} />
+                      <span className={`font-medium ${overBy > 0 ? "text-red-500" : "text-foreground"}`}>
+                        {overBy > 0 ? "Over salary" : "Free to spend"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground/60 tabular-nums">{freePct.toFixed(0)}%</span>
+                      <BlurAmount
+                        value={overBy > 0 ? overBy : freeAmount}
+                        className={`number-font font-700 tabular-nums ${overBy > 0 ? "text-red-500" : "text-emerald-600"}`}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </motion.div>
+      )}
 
       {/* Cash wallet banner (Feature 2) */}
       {cashWithdrawals.length > 0 && (

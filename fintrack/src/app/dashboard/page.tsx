@@ -34,6 +34,27 @@ export default async function DashboardPage() {
       .order("date", { ascending: false }),
   ]);
 
+  let totalSipMonthly = 0;
+  let totalEmiMonthly = 0;
+
+  try {
+    const { data: sips } = await supabase
+      .from("sips")
+      .select("monthly_amount")
+      .eq("user_id", user!.id)
+      .eq("is_active", true);
+    totalSipMonthly = (sips || []).reduce((s, sip) => s + sip.monthly_amount, 0);
+  } catch {}
+
+  try {
+    const { data: loans } = await supabase
+      .from("loans")
+      .select("emi_amount")
+      .eq("user_id", user!.id)
+      .eq("is_active", true);
+    totalEmiMonthly = (loans || []).reduce((s, l) => s + (l.emi_amount || 0), 0);
+  } catch {}
+
   return (
     <DashboardClient
       transactions={txResult.data || []}
@@ -42,6 +63,8 @@ export default async function DashboardPage() {
       userEmail={user!.email || ""}
       userSettings={settingsResult.data || null}
       cashWithdrawals={withdrawalResult.data || []}
+      totalSipMonthly={totalSipMonthly}
+      totalEmiMonthly={totalEmiMonthly}
     />
   );
 }
