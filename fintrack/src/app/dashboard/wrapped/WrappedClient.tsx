@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { Download, Trophy, TrendingDown, Star, Sparkles, Flame } from "lucide-react";
 import { Transaction, Budget, CATEGORY_META } from "@/types";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, isSipOrEmiTx } from "@/lib/utils";
 import { BlurAmount } from "@/components/ui/BlurAmount";
 
 interface Props {
@@ -18,23 +18,25 @@ export default function WrappedClient({ transactions, budgets, year, userEmail }
   const cardRef = useRef<HTMLDivElement>(null);
 
   const stats = useMemo(() => {
-    if (!transactions.length) return null;
+    // Exclude SIP and loan EMI — fixed commitments, not discretionary spending
+    const txns = transactions.filter(t => !isSipOrEmiTx(t));
+    if (!txns.length) return null;
 
-    const totalSpent = transactions.reduce((s, t) => s + t.amount, 0);
+    const totalSpent = txns.reduce((s, t) => s + t.amount, 0);
 
     // Top category
     const catTotals: Record<string, number> = {};
-    transactions.forEach((t) => { catTotals[t.category] = (catTotals[t.category] || 0) + t.amount; });
+    txns.forEach((t) => { catTotals[t.category] = (catTotals[t.category] || 0) + t.amount; });
     const [topCat, topCatAmt] = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0] || [];
 
     // Biggest single splurge
-    const biggest = transactions.reduce((a, b) => (b.amount > a.amount ? b : a), transactions[0]);
+    const biggest = txns.reduce((a, b) => (b.amount > a.amount ? b : a), txns[0]);
 
     // Monthly totals
     const monthTotals: Record<string, number> = {};
     for (let m = 1; m <= 12; m++) {
       const key = `${year}-${String(m).padStart(2, "0")}`;
-      monthTotals[key] = transactions
+      monthTotals[key] = txns
         .filter((t) => t.date.startsWith(key))
         .reduce((s, t) => s + t.amount, 0);
     }
@@ -53,15 +55,15 @@ export default function WrappedClient({ transactions, budgets, year, userEmail }
     const totalSaved = Math.max(0, totalBudgeted - totalSpent);
 
     // Average transaction amount
-    const avgTx = totalSpent / transactions.length;
+    const avgTx = totalSpent / txns.length;
 
     // Busiest day
     const dayTotals: Record<string, number> = {};
-    transactions.forEach((t) => { dayTotals[t.date] = (dayTotals[t.date] || 0) + t.amount; });
+    txns.forEach((t) => { dayTotals[t.date] = (dayTotals[t.date] || 0) + t.amount; });
     const busiestDayEntry = Object.entries(dayTotals).sort((a, b) => b[1] - a[1])[0];
 
     // Unique merchants
-    const uniqueMerchants = new Set(transactions.map((t) => t.description.toLowerCase().trim())).size;
+    const uniqueMerchants = new Set(txns.map((t) => t.description.toLowerCase().trim())).size;
 
     return {
       totalSpent,
@@ -75,7 +77,7 @@ export default function WrappedClient({ transactions, budgets, year, userEmail }
       avgTx,
       busiestDayEntry,
       uniqueMerchants,
-      txCount: transactions.length,
+      txCount: txns.length,
     };
   }, [transactions, budgets, year]);
 
@@ -145,11 +147,11 @@ export default function WrappedClient({ transactions, budgets, year, userEmail }
     },
     {
       icon: "💰",
-      label: "Saved vs budget",
+      label: "Under budget",
       value: stats.totalBudgeted > 0
         ? <BlurAmount value={stats.totalSaved} className="number-font text-4xl font-700 text-white" />
         : <span className="number-font text-4xl font-700 text-white">—</span>,
-      sub: stats.totalBudgeted > 0 ? "Out of " + formatCurrency(stats.totalBudgeted) + " budgeted" : "Set a budget to track savings",
+      sub: stats.totalBudgeted > 0 ? "Unspent from " + formatCurrency(stats.totalBudgeted) + " budget" : "Set a budget to track",
       gradient: "from-blue-500 to-indigo-600",
     },
     {
@@ -260,7 +262,7 @@ export default function WrappedClient({ transactions, budgets, year, userEmail }
             <div>
               <div className="font-medium">Spending diversity</div>
               <div className="text-muted-foreground text-xs mt-0.5">
-                {stats.uniqueMerchants} unique merchants across {Object.keys(CATEGORY_META).filter((c) => transactions.some((t) => t.category === c)).length} categories.
+                {stats.uniqueMerchants} unique merchants across {Object.keys(CATEGORY_META).filter((c) => c !== "savings" && c !== "emi" && transactions.some((t) => !isSipOrEmiTx(t) && t.category === c)).length} categories.
               </div>
             </div>
           </div>

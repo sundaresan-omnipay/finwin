@@ -8,7 +8,7 @@ import {
 } from "recharts";
 import { PiggyBank, TrendingUp } from "lucide-react";
 import { Transaction, CATEGORY_META, CATEGORIES } from "@/types";
-import { formatCurrency, getLast6Months, getLast12Months, getMonthLabel } from "@/lib/utils";
+import { formatCurrency, getLast6Months, getLast12Months, getMonthLabel, isSipOrEmiTx } from "@/lib/utils";
 import SpendingDonut from "@/components/charts/SpendingDonut";
 import { BlurAmount } from "@/components/ui/BlurAmount";
 
@@ -24,9 +24,15 @@ export default function AnalyticsClient({ transactions }: Props) {
 
   const currentMonthKey = months6[months6.length - 1];
 
+  // Exclude SIP and loan EMI — fixed commitments, not discretionary spending
+  const txns = useMemo(
+    () => transactions.filter(t => !isSipOrEmiTx(t)),
+    [transactions]
+  );
+
   const monthlyByCategory = useMemo(() => {
     return months6.map((m) => {
-      const mtxs = transactions.filter((t) => t.date.startsWith(m));
+      const mtxs = txns.filter((t) => t.date.startsWith(m));
       const label = new Date(m + "-01").toLocaleDateString("en-IN", { month: "short" });
       const row: Record<string, string | number> = { month: label };
       CATEGORIES.forEach((c) => {
@@ -35,14 +41,14 @@ export default function AnalyticsClient({ transactions }: Props) {
       row.total = mtxs.reduce((s, t) => s + t.amount, 0);
       return row;
     });
-  }, [transactions, months6]);
+  }, [txns, months6]);
 
   const currentTotals = useMemo(() => {
     const map: Record<string, number> = {};
-    transactions.filter((t) => t.date.startsWith(currentMonthKey))
+    txns.filter((t) => t.date.startsWith(currentMonthKey))
       .forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
     return map;
-  }, [transactions, currentMonthKey]);
+  }, [txns, currentMonthKey]);
 
   const radarData = useMemo(() =>
     CATEGORIES.filter((c) => currentTotals[c] > 0).map((c) => ({
@@ -53,8 +59,8 @@ export default function AnalyticsClient({ transactions }: Props) {
   );
 
   const avgByCategory = useMemo(() => {
-    return CATEGORIES.map((c) => {
-      const catTxs = transactions.filter((t) => t.category === c);
+    return CATEGORIES.filter(c => c !== "savings" && c !== "emi").map((c) => {
+      const catTxs = txns.filter((t) => t.category === c);
       const total = catTxs.reduce((s, t) => s + t.amount, 0);
       const count = catTxs.length;
       return {
@@ -67,16 +73,16 @@ export default function AnalyticsClient({ transactions }: Props) {
         lightColor: CATEGORY_META[c].lightColor,
       };
     }).filter((d) => d.count > 0).sort((a, b) => b.total - a.total);
-  }, [transactions]);
+  }, [txns]);
 
   const topSpendDays = useMemo(() => {
     const dayMap: Record<string, number> = {};
-    transactions.forEach((t) => { dayMap[t.date] = (dayMap[t.date] || 0) + t.amount; });
+    txns.forEach((t) => { dayMap[t.date] = (dayMap[t.date] || 0) + t.amount; });
     return Object.entries(dayMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([date, amount]) => ({ date, amount }));
-  }, [transactions]);
+  }, [txns]);
 
   // --- Festival sinking funds (Feature 3 / Phase 4) ---
   const festivalSuggestions = useMemo(() => {
@@ -86,7 +92,7 @@ export default function AnalyticsClient({ transactions }: Props) {
     // Monthly totals for all 12 months
     const monthlyTotals = months12.map((m) => ({
       month: m,
-      total: transactions.filter((t) => t.date.startsWith(m)).reduce((s, t) => s + t.amount, 0),
+      total: txns.filter((t) => t.date.startsWith(m)).reduce((s, t) => s + t.amount, 0),
       monthIdx: new Date(m + "-01").getMonth(),
     }));
 
@@ -119,7 +125,7 @@ export default function AnalyticsClient({ transactions }: Props) {
         monthlySave: Math.ceil(monthlySave / 100) * 100, // round to nearest ₹100
       };
     }).sort((a, b) => a.monthsUntil - b.monthsUntil);
-  }, [transactions, months12]);
+  }, [txns, months12]);
 
   return (
     <div className="space-y-6">

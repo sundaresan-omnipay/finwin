@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Target, CheckCircle2, AlertTriangle, Loader2, Clock } from "lucide-react";
 import { Transaction, Budget, CATEGORY_META, CATEGORIES, Category } from "@/types";
-import { formatCurrency, computeWorkHours } from "@/lib/utils";
+import { formatCurrency, computeWorkHours, isSipOrEmiTx } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { BlurAmount } from "@/components/ui/BlurAmount";
 
@@ -28,11 +28,17 @@ export default function BudgetClient({ transactions, budgets, currentMonth, cycl
     return map;
   });
 
+  // Exclude SIP and loan EMI — fixed commitments tracked separately, not part of day-to-day budget
+  const dayToDay = useMemo(
+    () => transactions.filter(t => !isSipOrEmiTx(t)),
+    [transactions]
+  );
+
   const categoryTotals = useMemo(() => {
     const map: Record<string, number> = {};
-    transactions.forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
+    dayToDay.forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
     return map;
-  }, [transactions]);
+  }, [dayToDay]);
 
   const totalSpent = useMemo(() => Object.values(categoryTotals).reduce((s, v) => s + v, 0), [categoryTotals]);
   const totalBudget = useMemo(
@@ -117,7 +123,7 @@ export default function BudgetClient({ transactions, budgets, currentMonth, cycl
         </div>
 
         <div className="divide-y divide-border/50">
-          {CATEGORIES.map((cat, i) => {
+          {CATEGORIES.filter(cat => cat !== "savings" && cat !== "emi").map((cat, i) => {
             const meta = CATEGORY_META[cat];
             const spent = categoryTotals[cat] || 0;
             const budgetAmt = parseFloat(localBudgets[cat] || "0");

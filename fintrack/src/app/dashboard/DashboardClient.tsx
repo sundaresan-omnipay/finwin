@@ -8,7 +8,7 @@ import {
   ShieldCheck, Clock, Coins, AlertTriangle,
 } from "lucide-react";
 import { Transaction, Budget, UserSettings, CashWithdrawal, CATEGORY_META } from "@/types";
-import { formatCurrency, getSalaryCycleBounds, getPrevSalaryCycleBounds, computeNoSpendStreak, computeWorkHours } from "@/lib/utils";
+import { formatCurrency, getSalaryCycleBounds, getPrevSalaryCycleBounds, computeNoSpendStreak, computeWorkHours, isSipOrEmiTx } from "@/lib/utils";
 import SpendingDonut from "@/components/charts/SpendingDonut";
 import MonthlyTrendChart from "@/components/charts/MonthlyTrendChart";
 import DailySpendChart from "@/components/charts/DailySpendChart";
@@ -57,20 +57,13 @@ export default function DashboardClient({
   const totalSpent = useMemo(() => monthTxs.reduce((s, t) => s + t.amount, 0), [monthTxs]);
 
   // Exclude SIP/EMI transactions from day-to-day spending (they're tracked separately)
-  const dayToDaySpent = useMemo(() => monthTxs
-    .filter((t) => {
-      const desc = (t.description || "").toLowerCase();
-      return !desc.startsWith("sip:") && !desc.startsWith("emi:") && t.category !== "savings" && t.category !== "emi";
-    })
-    .reduce((s, t) => s + t.amount, 0),
-  [monthTxs]);
-  const isSipOrEmi = (t: Transaction) => {
-    const desc = (t.description || "").toLowerCase();
-    return desc.startsWith("sip:") || desc.startsWith("emi:") || t.category === "savings" || t.category === "emi";
-  };
+  const dayToDaySpent = useMemo(
+    () => monthTxs.filter((t) => !isSipOrEmiTx(t)).reduce((s, t) => s + t.amount, 0),
+    [monthTxs]
+  );
 
   const prevDayToDaySpent = useMemo(
-    () => prevMonthTxs.filter((t) => !isSipOrEmi(t)).reduce((s, t) => s + t.amount, 0),
+    () => prevMonthTxs.filter((t) => !isSipOrEmiTx(t)).reduce((s, t) => s + t.amount, 0),
     [prevMonthTxs]
   );
 
@@ -84,7 +77,7 @@ export default function DashboardClient({
 
   const today = new Date().toISOString().split("T")[0];
   const todaySpent = useMemo(
-    () => transactions.filter((t) => t.date === today && !isSipOrEmi(t)).reduce((s, t) => s + t.amount, 0),
+    () => transactions.filter((t) => t.date === today && !isSipOrEmiTx(t)).reduce((s, t) => s + t.amount, 0),
     [transactions, today]
   );
 
@@ -93,7 +86,7 @@ export default function DashboardClient({
 
   const categoryTotals = useMemo(() => {
     const map: Record<string, number> = {};
-    monthTxs.filter((t) => !isSipOrEmi(t)).forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
+    monthTxs.filter((t) => !isSipOrEmiTx(t)).forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
     return map;
   }, [monthTxs]);
 
