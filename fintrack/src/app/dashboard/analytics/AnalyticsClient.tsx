@@ -6,10 +6,11 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, Radar,
 } from "recharts";
-import { PiggyBank, TrendingUp } from "lucide-react";
+import { PiggyBank, TrendingUp, CalendarDays } from "lucide-react";
 import { Transaction, CATEGORY_META, CATEGORIES } from "@/types";
 import { formatCurrency, getLast6Months, getLast12Months, getMonthLabel, isSipOrEmiTx } from "@/lib/utils";
 import SpendingDonut from "@/components/charts/SpendingDonut";
+import SpendingHeatmap from "@/components/charts/SpendingHeatmap";
 import { BlurAmount } from "@/components/ui/BlurAmount";
 
 interface Props {
@@ -133,6 +134,22 @@ export default function AnalyticsClient({ transactions }: Props) {
         <h1 className="font-display text-3xl font-700 mb-1">Analytics</h1>
         <p className="text-muted-foreground text-sm">Deep dive into your spending patterns</p>
       </div>
+
+      {/* Spending heatmap */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-card border border-border/50 rounded-2xl p-5"
+      >
+        <div className="flex items-center gap-2 mb-4">
+          <CalendarDays className="w-5 h-5 text-violet-500" />
+          <div>
+            <h3 className="font-display text-base font-600">Spending calendar</h3>
+            <p className="text-xs text-muted-foreground">Last 6 weeks — colour shows daily intensity</p>
+          </div>
+        </div>
+        <SpendingHeatmap transactions={transactions} weeks={6} />
+      </motion.div>
 
       {/* Festival sinking funds (Feature 3 — Phase 4) */}
       {festivalSuggestions.length > 0 && (

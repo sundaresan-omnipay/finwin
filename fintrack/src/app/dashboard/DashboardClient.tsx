@@ -6,7 +6,7 @@ import {
   TrendingUp, TrendingDown, Wallet, ArrowUpRight,
   Flame, Target, Sparkles, ChevronRight, Zap,
   ShieldCheck, Clock, Coins, AlertTriangle, Users, Settings,
-  Bell, PieChart, Plus, TrendingDown as TrendDownIcon, Activity,
+  Bell, PieChart, Plus, TrendingDown as TrendDownIcon, Activity, Calculator,
 } from "lucide-react";
 import { Transaction, Budget, UserSettings, CashWithdrawal, Credit, CATEGORY_META, NetWorthEntry, Bill, IncomeEntry } from "@/types";
 import { formatCurrency, getSalaryCycleBounds, getPrevSalaryCycleBounds, computeNoSpendStreak, computeWorkHours, isSipOrEmiTx } from "@/lib/utils";
@@ -98,6 +98,12 @@ export default function DashboardClient({
     monthTxs.filter((t) => !isSipOrEmiTx(t)).forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
     return map;
   }, [monthTxs]);
+
+  const prevCategoryTotals = useMemo(() => {
+    const map: Record<string, number> = {};
+    prevMonthTxs.filter((t) => !isSipOrEmiTx(t)).forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
+    return map;
+  }, [prevMonthTxs]);
 
   const topCategory = useMemo(() => {
     const entries = Object.entries(categoryTotals);
@@ -310,6 +316,44 @@ export default function DashboardClient({
   const totalAssets = useMemo(() => netWorthEntries.filter(e => e.type === "asset").reduce((s, e) => s + e.amount, 0), [netWorthEntries]);
   const totalLiabilities = useMemo(() => netWorthEntries.filter(e => e.type === "liability").reduce((s, e) => s + e.amount, 0), [netWorthEntries]);
   const netWorth = totalAssets - totalLiabilities;
+
+  // --- 80C Tax savings tracker ---
+  const tax80c = useMemo(() => {
+    const limit = 150000;
+    const today = new Date();
+    // Indian financial year: Apr 1 - Mar 31
+    const fyStart = today.getMonth() >= 3
+      ? new Date(today.getFullYear(), 3, 1)  // Apr of current year
+      : new Date(today.getFullYear() - 1, 3, 1); // Apr of prev year
+    const fyEnd = new Date(fyStart.getFullYear() + 1, 2, 31);
+    const fyStartStr = fyStart.toISOString().split("T")[0];
+    const fyEndStr = fyEnd.toISOString().split("T")[0];
+
+    // SIP contributions in this FY (savings category transactions tagged as recurring)
+    const fySipContributions = transactions
+      .filter(t => t.date >= fyStartStr && t.date <= fyEndStr && t.category === "savings" && t.is_recurring)
+      .reduce((s, t) => s + t.amount, 0);
+
+    // Annual SIP from active SIPs (approximate FY amount = monthly × months elapsed in FY)
+    const today2 = new Date();
+    const monthsElapsedInFY = (today2.getFullYear() - fyStart.getFullYear()) * 12 + (today2.getMonth() - fyStart.getMonth()) + 1;
+    const estimatedAnnualSip = totalSipMonthly * Math.min(monthsElapsedInFY, 12);
+
+    // EPF/PPF from networth entries
+    const ppfEntries = netWorthEntries.filter(e => e.category === "pf_ppf");
+    const ppfAmount = ppfEntries.reduce((s, e) => s + e.amount, 0);
+
+    // Best estimate: use max of SIP contributions or estimated annual SIP
+    const sipUsed = Math.max(fySipContributions, estimatedAnnualSip);
+    // PPF contribution cap at ₹1.5L (show separately, don't double count with SIP)
+    const totalUsed = Math.min(sipUsed, limit);
+    const remaining = Math.max(0, limit - totalUsed);
+    const pct = Math.min((totalUsed / limit) * 100, 100);
+
+    const fyLabel = `FY ${fyStart.getFullYear()}-${String(fyEnd.getFullYear()).slice(2)}`;
+
+    return { limit, totalUsed, remaining, pct, fyLabel, ppfAmount, sipUsed, monthsElapsedInFY };
+  }, [transactions, totalSipMonthly, netWorthEntries]);
 
   // --- Income this cycle ---
   const cycleIncome = useMemo(
@@ -631,6 +675,61 @@ export default function DashboardClient({
             <div className={`text-xs font-medium mb-1 ${netWorth >= 0 ? "text-blue-700 dark:text-blue-400" : "text-amber-700 dark:text-amber-400"}`}>Net Worth</div>
             <BlurAmount value={Math.abs(netWorth)} className={`number-font text-lg font-700 ${netWorth >= 0 ? "text-blue-700 dark:text-blue-400" : "text-amber-700 dark:text-amber-400"}`} />
           </Link>
+        </motion.div>
+      )}
+
+      {/* 80C Tax Savings Tracker */}
+      {monthlySalary && totalSipMonthly > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.162 }}
+          className="bg-gradient-to-br from-indigo-50 via-indigo-50/60 to-transparent dark:from-indigo-950/20 dark:via-indigo-950/10 border border-indigo-200/60 dark:border-indigo-900/40 rounded-2xl p-5"
+        >
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <Calculator className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <div>
+                <h3 className="font-display text-sm font-600 text-indigo-800 dark:text-indigo-300">80C Tax Savings</h3>
+                <p className="text-[11px] text-indigo-600/70 dark:text-indigo-400/70">{tax80c.fyLabel} · Limit ₹1,50,000</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <BlurAmount
+                value={tax80c.totalUsed}
+                className="number-font text-lg font-700 text-indigo-700 dark:text-indigo-300"
+              />
+              <div className="text-[11px] text-indigo-600/70 dark:text-indigo-400/70">invested so far</div>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="h-2.5 bg-indigo-100 dark:bg-indigo-900/40 rounded-full overflow-hidden mb-3">
+            <div
+              className={`h-full rounded-full transition-all ${tax80c.pct >= 100 ? "bg-emerald-500" : tax80c.pct >= 60 ? "bg-indigo-500" : "bg-indigo-400"}`}
+              style={{ width: `${tax80c.pct}%` }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between text-xs">
+            <span className={`font-medium ${tax80c.pct >= 100 ? "text-emerald-600" : "text-indigo-700 dark:text-indigo-300"}`}>
+              {tax80c.pct >= 100
+                ? "✓ Limit maxed — max tax benefit claimed!"
+                : `${tax80c.pct.toFixed(0)}% used · ${formatCurrency(tax80c.remaining)} more to save ₹${((tax80c.remaining * 0.30) / 1000).toFixed(0)}k+ tax`}
+            </span>
+            <Link href="/dashboard/savings" className="flex items-center gap-0.5 text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
+              SIPs <ChevronRight className="w-3 h-3" />
+            </Link>
+          </div>
+
+          {tax80c.ppfAmount > 0 && (
+            <div className="mt-2.5 pt-2.5 border-t border-indigo-200/50 dark:border-indigo-800/30 text-[11px] text-indigo-600/70 dark:text-indigo-400/70">
+              EPF/PPF balance: <BlurAmount value={tax80c.ppfAmount} className="inline font-semibold" /> (tracked in Net Worth)
+            </div>
+          )}
+          <div className="mt-1 text-[10px] text-indigo-500/60 dark:text-indigo-500/50">
+            Estimate based on active SIPs × {tax80c.monthsElapsedInFY} months in FY. Includes ELSS, PPF contributions.
+          </div>
         </motion.div>
       )}
 
@@ -1037,6 +1136,86 @@ export default function DashboardClient({
           )}
         </motion.div>
       </div>
+
+      {/* Category vs last cycle comparison */}
+      {Object.keys(categoryTotals).length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.38 }}
+          className="bg-card border border-border/50 rounded-2xl p-5"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <PieChart className="w-4 h-4 text-violet-500" />
+            <div>
+              <h3 className="font-display text-sm font-600">This cycle vs last cycle</h3>
+              <p className="text-xs text-muted-foreground">Category breakdown comparison</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {Object.entries(categoryTotals)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 8)
+              .map(([cat, curr]) => {
+                const prev = prevCategoryTotals[cat] ?? 0;
+                const diff = curr - prev;
+                const diffPct = prev > 0 ? (diff / prev) * 100 : null;
+                const meta = CATEGORY_META[cat as keyof typeof CATEGORY_META];
+                const maxAmt = Math.max(curr, prev, 1);
+                return (
+                  <div key={cat} className="flex items-center gap-3 group">
+                    <span className="text-base w-7 flex-shrink-0">{meta?.icon ?? "💰"}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-xs font-medium truncate">{meta?.label ?? cat}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                          <BlurAmount value={curr} className="number-font text-xs font-600" />
+                          {diffPct !== null && (
+                            <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${diff > 0 ? "text-red-500" : "text-emerald-500"}`}>
+                              {diff > 0 ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+                              {Math.abs(diffPct).toFixed(0)}%
+                            </span>
+                          )}
+                          {diffPct === null && prev === 0 && (
+                            <span className="text-[10px] text-muted-foreground">new</span>
+                          )}
+                        </div>
+                      </div>
+                      {/* Dual bar: this (solid) vs last (faint) */}
+                      <div className="relative h-1.5 bg-secondary rounded-full overflow-hidden">
+                        {prev > 0 && (
+                          <div
+                            className="absolute inset-y-0 left-0 bg-muted-foreground/20 rounded-full"
+                            style={{ width: `${(prev / maxAmt) * 100}%` }}
+                          />
+                        )}
+                        <div
+                          className={`absolute inset-y-0 left-0 rounded-full transition-all ${diff > 50 ? "bg-red-400" : diff < -50 ? "bg-emerald-500" : "bg-violet-400"}`}
+                          style={{ width: `${(curr / maxAmt) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+          {Object.keys(prevCategoryTotals).filter(c => !categoryTotals[c]).length > 0 && (
+            <div className="mt-3 pt-3 border-t border-border/40 flex flex-wrap gap-2">
+              {Object.entries(prevCategoryTotals)
+                .filter(([c]) => !categoryTotals[c])
+                .slice(0, 4)
+                .map(([cat, amt]) => {
+                  const meta = CATEGORY_META[cat as keyof typeof CATEGORY_META];
+                  return (
+                    <span key={cat} className="flex items-center gap-1 text-[11px] text-muted-foreground bg-secondary/60 rounded-full px-2 py-0.5">
+                      {meta?.icon} {meta?.label ?? cat} — <BlurAmount value={amt} className="number-font inline" /> last cycle
+                    </span>
+                  );
+                })}
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* Recent transactions */}
       <motion.div
