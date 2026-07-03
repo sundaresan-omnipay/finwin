@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { User, Shield, Trash2, LogOut, Loader2, CheckCircle2, CalendarClock, Banknote, MessageCircle, Users, ShieldCheck } from "lucide-react";
+import { User, Shield, Trash2, LogOut, Loader2, CheckCircle2, CalendarClock, Banknote, MessageCircle, Users, ShieldCheck, Send } from "lucide-react";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { UserSettings } from "@/types";
@@ -18,6 +18,7 @@ export default function SettingsClient({ user, userSettings }: Props) {
   const supabase = createClient();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
 
   const [salaryDay, setSalaryDay] = useState(String(userSettings?.salary_day ?? 1));
   const [monthlySalary, setMonthlySalary] = useState(String(userSettings?.monthly_salary ?? ""));
@@ -70,6 +71,22 @@ export default function SettingsClient({ user, userSettings }: Props) {
     flash(error ? "Error: " + error.message : "Settings saved!");
     router.refresh();
     setLoading(false);
+  }
+
+  async function handleSendSummary() {
+    if (!whatsappPhone.trim()) {
+      flash("Save your WhatsApp number first, then send the report.");
+      return;
+    }
+    setSendingWhatsApp(true);
+    try {
+      const res = await fetch("/api/send-summary", { method: "POST" });
+      const json = await res.json();
+      flash(res.ok ? "Monthly report sent to WhatsApp!" : `Error: ${json.error}`);
+    } catch {
+      flash("Error: Could not reach the server.");
+    }
+    setSendingWhatsApp(false);
   }
 
   async function handleSignOut() {
@@ -202,6 +219,18 @@ export default function SettingsClient({ user, userSettings }: Props) {
             <p className="text-xs text-muted-foreground mt-1.5">
               Register your number to log transactions via WhatsApp — send "250 swiggy food" to add a spend.
             </p>
+            {whatsappPhone.trim() && (
+              <button
+                type="button"
+                onClick={handleSendSummary}
+                disabled={sendingWhatsApp}
+                className="mt-3 flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60"
+              >
+                {sendingWhatsApp
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending…</>
+                  : <><Send className="w-3.5 h-3.5" /> Send monthly report now</>}
+              </button>
+            )}
           </div>
 
           <div>

@@ -83,6 +83,21 @@ export interface Bill {
   created_at: string;
 }
 
+export type FuelType = "petrol" | "diesel" | "cng" | "ev";
+
+export interface FuelLog {
+  id: string;
+  user_id: string;
+  date: string;
+  liters: number;
+  amount: number;      // total ₹ paid
+  odometer: number;   // km at fill-up
+  fuel_type: FuelType;
+  vehicle?: string | null;
+  notes?: string | null;
+  created_at: string;
+}
+
 export const ASSET_CATEGORIES = [
   { value: "cash_savings", label: "Cash & Savings", icon: "🏦" },
   { value: "fixed_deposit", label: "Fixed Deposit", icon: "📋" },

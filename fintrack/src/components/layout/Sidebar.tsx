@@ -18,6 +18,7 @@ import {
   TrendingUp,
   Building2,
   Star,
+  Fuel,
   MoreHorizontal,
   X,
   Bell,
@@ -41,6 +42,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/bills", label: "Bills", icon: Bell },
   { href: "/dashboard/savings", label: "SIP Savings", icon: TrendingUp },
   { href: "/dashboard/goals", label: "Goals", icon: Star },
+  { href: "/dashboard/fuel", label: "Fuel Log", icon: Fuel },
   { href: "/dashboard/wrapped", label: "Wrapped", icon: Gift },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
