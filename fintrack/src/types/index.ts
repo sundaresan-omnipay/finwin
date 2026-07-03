@@ -1,12 +1,20 @@
 export type Category =
   | "food"
+  | "groceries"
+  | "vegetables"
+  | "milk"
+  | "snacks"
   | "transport"
+  | "petrol"
   | "shopping"
+  | "clothing"
   | "bills"
+  | "household"
   | "health"
   | "entertainment"
   | "travel"
   | "education"
+  | "kids"
   | "savings"
   | "emi"
   | "other";
@@ -20,6 +28,8 @@ export interface Transaction {
   date: string;
   notes?: string;
   is_cash?: boolean;
+  is_recurring?: boolean;
+  member?: string | null;
   created_at: string;
 }
 
@@ -29,9 +39,69 @@ export interface UserSettings {
   salary_day: number;       // 1–28
   monthly_salary: number | null;
   whatsapp_phone: string | null;
+  partner_name: string | null;
+  partner_account_balance: number | null;
+  emergency_fund_amount: number | null;
   created_at: string;
   updated_at: string;
 }
+
+export interface NetWorthEntry {
+  id: string;
+  user_id: string;
+  name: string;
+  amount: number;
+  type: "asset" | "liability";
+  category: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type IncomeType = "salary" | "freelance" | "rental" | "dividend" | "bonus" | "gift" | "other";
+
+export interface IncomeEntry {
+  id: string;
+  user_id: string;
+  source: string;
+  amount: number;
+  date: string;
+  income_type: IncomeType;
+  notes?: string;
+  created_at: string;
+}
+
+export interface Bill {
+  id: string;
+  user_id: string;
+  name: string;
+  amount: number | null;
+  due_day: number;
+  category: string;
+  is_active: boolean;
+  notes?: string;
+  created_at: string;
+}
+
+export const ASSET_CATEGORIES = [
+  { value: "cash_savings", label: "Cash & Savings", icon: "🏦" },
+  { value: "fixed_deposit", label: "Fixed Deposit", icon: "📋" },
+  { value: "mutual_funds", label: "Mutual Funds & SIP", icon: "📈" },
+  { value: "stocks", label: "Stocks & ETFs", icon: "📊" },
+  { value: "gold", label: "Gold & Silver", icon: "🥇" },
+  { value: "property", label: "Property & Real Estate", icon: "🏠" },
+  { value: "pf_ppf", label: "EPF / PPF", icon: "🛡️" },
+  { value: "other_asset", label: "Other Asset", icon: "💎" },
+] as const;
+
+export const LIABILITY_CATEGORIES = [
+  { value: "home_loan", label: "Home Loan", icon: "🏠" },
+  { value: "car_loan", label: "Car Loan", icon: "🚗" },
+  { value: "personal_loan", label: "Personal Loan", icon: "💸" },
+  { value: "credit_card", label: "Credit Card Debt", icon: "💳" },
+  { value: "education_loan", label: "Education Loan", icon: "🎓" },
+  { value: "other_liability", label: "Other Liability", icon: "📄" },
+] as const;
 
 export interface CashWithdrawal {
   id: string;
@@ -61,11 +131,39 @@ export interface CategoryMeta {
 
 export const CATEGORY_META: Record<Category, CategoryMeta> = {
   food: {
-    label: "Food & Dining",
+    label: "Dining Out",
     icon: "🍽️",
     color: "#f97316",
     lightColor: "#fff7ed",
     textColor: "#c2410c",
+  },
+  groceries: {
+    label: "Groceries",
+    icon: "🛒",
+    color: "#84cc16",
+    lightColor: "#f7fee7",
+    textColor: "#3f6212",
+  },
+  vegetables: {
+    label: "Vegetables & Fruits",
+    icon: "🥦",
+    color: "#16a34a",
+    lightColor: "#f0fdf4",
+    textColor: "#14532d",
+  },
+  milk: {
+    label: "Milk & Dairy",
+    icon: "🥛",
+    color: "#60a5fa",
+    lightColor: "#eff6ff",
+    textColor: "#1d4ed8",
+  },
+  snacks: {
+    label: "Snacks & Chai",
+    icon: "☕",
+    color: "#d97706",
+    lightColor: "#fffbeb",
+    textColor: "#78350f",
   },
   transport: {
     label: "Transport",
@@ -74,6 +172,13 @@ export const CATEGORY_META: Record<Category, CategoryMeta> = {
     lightColor: "#eff6ff",
     textColor: "#1d4ed8",
   },
+  petrol: {
+    label: "Petrol & Fuel",
+    icon: "⛽",
+    color: "#ef4444",
+    lightColor: "#fef2f2",
+    textColor: "#b91c1c",
+  },
   shopping: {
     label: "Shopping",
     icon: "🛍️",
@@ -81,12 +186,26 @@ export const CATEGORY_META: Record<Category, CategoryMeta> = {
     lightColor: "#faf5ff",
     textColor: "#7e22ce",
   },
+  clothing: {
+    label: "Clothing",
+    icon: "👕",
+    color: "#fb923c",
+    lightColor: "#fff7ed",
+    textColor: "#c2410c",
+  },
   bills: {
     label: "Bills & Utilities",
     icon: "💡",
     color: "#eab308",
     lightColor: "#fefce8",
     textColor: "#a16207",
+  },
+  household: {
+    label: "Home Supplies",
+    icon: "🧹",
+    color: "#a78bfa",
+    lightColor: "#f5f3ff",
+    textColor: "#6d28d9",
   },
   health: {
     label: "Health",
@@ -115,6 +234,13 @@ export const CATEGORY_META: Record<Category, CategoryMeta> = {
     color: "#8b5cf6",
     lightColor: "#f5f3ff",
     textColor: "#6d28d9",
+  },
+  kids: {
+    label: "Kids & School",
+    icon: "🎒",
+    color: "#f472b6",
+    lightColor: "#fdf4ff",
+    textColor: "#a21caf",
   },
   savings: {
     label: "SIP & Savings",
@@ -178,3 +304,23 @@ export interface Goal {
 }
 
 export const CATEGORIES = Object.keys(CATEGORY_META) as Category[];
+
+export const CATEGORY_GROUPS: Array<{ label: string; categories: Category[] }> = [
+  { label: "Daily Food", categories: ["food", "groceries", "vegetables", "milk", "snacks"] },
+  { label: "Home & Bills", categories: ["bills", "household"] },
+  { label: "Transport", categories: ["transport", "petrol"] },
+  { label: "Lifestyle", categories: ["shopping", "clothing", "health", "entertainment"] },
+  { label: "Family & Growth", categories: ["kids", "education", "travel"] },
+  { label: "Other", categories: ["other"] },
+];
+
+export interface Credit {
+  id: string;
+  user_id: string;
+  amount: number;
+  source: string;
+  credit_type: string;
+  date: string;
+  notes?: string;
+  created_at: string;
+}

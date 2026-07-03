@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clearing session…</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #0f172a; color: #e2e8f0; }
+    .box { text-align: center; max-width: 360px; padding: 2rem; }
+    .spinner { width: 40px; height: 40px; border: 3px solid #334155; border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1.5rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    h2 { margin: 0 0 0.5rem; font-size: 1.25rem; }
+    p { margin: 0; color: #94a3b8; font-size: 0.875rem; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="spinner"></div>
+    <h2>Clearing session cookies…</h2>
+    <p>You'll be redirected to login in a moment.</p>
+  </div>
+  <script>
+    // Expire every cookie visible to this origin, trying all common paths and the root.
+    function expireAll() {
+      const paths = ['/', '/dashboard', '/auth', ''];
+      const domains = [location.hostname, '.' + location.hostname, ''];
+      document.cookie.split(';').forEach(function(c) {
+        var name = c.trim().split('=')[0];
+        if (!name) return;
+        paths.forEach(function(path) {
+          domains.forEach(function(domain) {
+            var base = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; SameSite=Lax';
+            if (path) base += '; path=' + path;
+            if (domain) base += '; domain=' + domain;
+            document.cookie = base;
+          });
+        });
+      });
+    }
+
+    expireAll();
+
+    // Also clear localStorage and sessionStorage (Supabase sometimes uses these)
+    try { localStorage.clear(); } catch(e) {}
+    try { sessionStorage.clear(); } catch(e) {}
+
+    // Unregister any service workers
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        regs.forEach(function(r) { r.unregister(); });
+      });
+    }
+
+    // Verify and redirect
+    setTimeout(function() {
+      window.location.href = '/auth';
+    }, 1500);
+  </script>
+</body>
+</html>

@@ -150,7 +150,8 @@ export function computeNoSpendStreak(transactions: { date: string; category: str
 // SIP and loan EMI are fixed salary deductions — exclude from all budget, analytics, and wrapped calculations.
 // A transaction is SIP/EMI if its category is "savings"/"emi" OR its description starts with "SIP:"/"EMI:"
 // (the old "Mark paid" button sometimes saved these as category "other" with a prefixed description).
-export function isSipOrEmiTx(t: { category: string; description?: string | null }): boolean {
+export function isSipOrEmiTx(t: { category: string; description?: string | null; is_recurring?: boolean }): boolean {
+  if (t.is_recurring) return true;
   if (t.category === "savings" || t.category === "emi") return true;
   const desc = (t.description || "").toLowerCase();
   return desc.startsWith("sip:") || desc.startsWith("emi:");

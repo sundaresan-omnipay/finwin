@@ -2,7 +2,7 @@
 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Transaction } from "@/types";
-import { getLast6Months, getMonthLabel, formatCurrency } from "@/lib/utils";
+import { getLast6Months, getMonthLabel, formatCurrency, isSipOrEmiTx } from "@/lib/utils";
 
 interface Props {
   transactions: Transaction[];
@@ -13,7 +13,7 @@ export default function MonthlyTrendChart({ transactions }: Props) {
 
   const data = months.map((m) => {
     const total = transactions
-      .filter((t) => t.date.startsWith(m))
+      .filter((t) => t.date.startsWith(m) && !isSipOrEmiTx(t))
       .reduce((s, t) => s + t.amount, 0);
     return {
       month: new Date(m + "-01").toLocaleDateString("en-IN", { month: "short" }),

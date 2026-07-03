@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { getMonthKey, getLast6Months, getSalaryCycleBounds } from "@/lib/utils";
+import { getMonthKey, getLast6Months } from "@/lib/utils";
+import { Credit, NetWorthEntry, Bill, IncomeEntry } from "@/types";
 import DashboardClient from "./DashboardClient";
 
 export default async function DashboardPage() {
@@ -34,6 +35,35 @@ export default async function DashboardPage() {
       .order("date", { ascending: false }),
   ]);
 
+  let credits: Credit[] = [];
+  try {
+    const { data: creditsData } = await supabase
+      .from("credits")
+      .select("*")
+      .eq("user_id", user!.id)
+      .gte("date", startDate)
+      .order("date", { ascending: false });
+    credits = (creditsData || []) as Credit[];
+  } catch {}
+
+  let netWorthEntries: NetWorthEntry[] = [];
+  try {
+    const { data } = await supabase.from("net_worth_entries").select("*").eq("user_id", user!.id);
+    netWorthEntries = (data || []) as NetWorthEntry[];
+  } catch {}
+
+  let bills: Bill[] = [];
+  try {
+    const { data } = await supabase.from("bills").select("*").eq("user_id", user!.id).eq("is_active", true);
+    bills = (data || []) as Bill[];
+  } catch {}
+
+  let incomeEntries: IncomeEntry[] = [];
+  try {
+    const { data } = await supabase.from("income_entries").select("*").eq("user_id", user!.id).gte("date", startDate).order("date", { ascending: false });
+    incomeEntries = (data || []) as IncomeEntry[];
+  } catch {}
+
   let totalSipMonthly = 0;
   let totalEmiMonthly = 0;
 
@@ -63,8 +93,12 @@ export default async function DashboardPage() {
       userEmail={user!.email || ""}
       userSettings={settingsResult.data || null}
       cashWithdrawals={withdrawalResult.data || []}
+      credits={credits}
       totalSipMonthly={totalSipMonthly}
       totalEmiMonthly={totalEmiMonthly}
+      netWorthEntries={netWorthEntries}
+      bills={bills}
+      incomeEntries={incomeEntries}
     />
   );
 }

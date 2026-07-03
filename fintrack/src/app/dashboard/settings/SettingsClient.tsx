@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { User, Shield, Trash2, LogOut, Loader2, CheckCircle2, CalendarClock, Banknote, MessageCircle } from "lucide-react";
+import { User, Shield, Trash2, LogOut, Loader2, CheckCircle2, CalendarClock, Banknote, MessageCircle, Users, ShieldCheck } from "lucide-react";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { UserSettings } from "@/types";
@@ -22,6 +22,9 @@ export default function SettingsClient({ user, userSettings }: Props) {
   const [salaryDay, setSalaryDay] = useState(String(userSettings?.salary_day ?? 1));
   const [monthlySalary, setMonthlySalary] = useState(String(userSettings?.monthly_salary ?? ""));
   const [whatsappPhone, setWhatsappPhone] = useState(userSettings?.whatsapp_phone ?? "");
+  const [emergencyFundAmount, setEmergencyFundAmount] = useState(String(userSettings?.emergency_fund_amount ?? ""));
+  const [partnerName, setPartnerName] = useState(userSettings?.partner_name ?? "");
+  const [partnerBalance, setPartnerBalance] = useState(String(userSettings?.partner_account_balance ?? ""));
 
   function flash(msg: string) {
     setMessage(msg);
@@ -44,11 +47,19 @@ export default function SettingsClient({ user, userSettings }: Props) {
     const salary = monthlySalary ? parseFloat(monthlySalary) : null;
     const phone = whatsappPhone.trim() || null;
 
+    const partnerBalanceParsed = partnerBalance ? parseFloat(partnerBalance) : null;
+    const partnerNameTrimmed = partnerName.trim() || null;
+
+    const emergencyFund = emergencyFundAmount ? parseFloat(emergencyFundAmount) : null;
+
     const payload = {
       user_id: user.id,
       salary_day: day,
       monthly_salary: salary,
       whatsapp_phone: phone,
+      emergency_fund_amount: emergencyFund,
+      partner_name: partnerNameTrimmed,
+      partner_account_balance: partnerBalanceParsed,
       updated_at: new Date().toISOString(),
     };
 
@@ -77,6 +88,13 @@ export default function SettingsClient({ user, userSettings }: Props) {
         supabase.from("transactions").delete().eq("user_id", u.id),
         supabase.from("budgets").delete().eq("user_id", u.id),
         supabase.from("cash_withdrawals").delete().eq("user_id", u.id),
+        supabase.from("credits").delete().eq("user_id", u.id),
+        supabase.from("net_worth_entries").delete().eq("user_id", u.id),
+        supabase.from("income_entries").delete().eq("user_id", u.id),
+        supabase.from("bills").delete().eq("user_id", u.id),
+        supabase.from("sips").delete().eq("user_id", u.id),
+        supabase.from("loans").delete().eq("user_id", u.id),
+        supabase.from("goals").delete().eq("user_id", u.id),
         supabase.from("user_settings").delete().eq("user_id", u.id),
       ]);
     }
@@ -186,6 +204,24 @@ export default function SettingsClient({ user, userSettings }: Props) {
             </p>
           </div>
 
+          <div>
+            <label className="text-sm font-medium mb-1.5 flex items-center gap-2 text-muted-foreground">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+              Emergency fund amount (₹) — optional
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={emergencyFundAmount}
+              onChange={(e) => setEmergencyFundAmount(e.target.value)}
+              className="w-48 h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400"
+              placeholder="e.g. 150000"
+            />
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Powers the Emergency Fund dimension of your Financial Health Score. Target: 6× monthly expenses.
+            </p>
+          </div>
+
           <button
             type="button"
             onClick={saveUserSettings}
@@ -193,6 +229,57 @@ export default function SettingsClient({ user, userSettings }: Props) {
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all disabled:opacity-60"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save preferences"}
+          </button>
+        </div>
+      </motion.div>
+
+      {/* Partner Account */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.09 }}
+        className="bg-card border border-pink-200/60 dark:border-pink-900/40 rounded-2xl p-6"
+      >
+        <div className="flex items-center gap-3 mb-2">
+          <Users className="w-4 h-4 text-pink-500" />
+          <h3 className="font-display text-base font-600">Partner account</h3>
+          <span className="text-[10px] font-semibold bg-pink-100 dark:bg-pink-950/40 text-pink-600 dark:text-pink-400 px-2 py-0.5 rounded-full">Sub-account</span>
+        </div>
+        <p className="text-xs text-muted-foreground mb-5">
+          Track your partner&apos;s spending under the same login. Add their name and current account balance — FinWin will show their balance on your dashboard and let you tag transactions as theirs.
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium mb-1.5 block text-muted-foreground">Partner&apos;s name</label>
+            <input
+              type="text"
+              value={partnerName}
+              onChange={(e) => setPartnerName(e.target.value)}
+              className="w-56 h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300/50 focus:border-pink-400"
+              placeholder="e.g. Priya"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1.5 block text-muted-foreground">Current account balance (₹)</label>
+            <input
+              type="number"
+              min="0"
+              value={partnerBalance}
+              onChange={(e) => setPartnerBalance(e.target.value)}
+              className="w-48 h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300/50 focus:border-pink-400"
+              placeholder="e.g. 45000"
+            />
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Enter the balance as it stands today. FinWin will subtract their spending from this to show a running balance.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={saveUserSettings}
+            disabled={loading}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-pink-500 text-white text-sm font-medium hover:bg-pink-600 transition-all disabled:opacity-60"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save partner account"}
           </button>
         </div>
       </motion.div>
