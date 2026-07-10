@@ -26,6 +26,7 @@ export default function SettingsClient({ user, userSettings }: Props) {
   const [emergencyFundAmount, setEmergencyFundAmount] = useState(String(userSettings?.emergency_fund_amount ?? ""));
   const [partnerName, setPartnerName] = useState(userSettings?.partner_name ?? "");
   const [partnerBalance, setPartnerBalance] = useState(String(userSettings?.partner_account_balance ?? ""));
+  const [partnerWhatsapp, setPartnerWhatsapp] = useState(userSettings?.partner_whatsapp_phone ?? "");
 
   function flash(msg: string) {
     setMessage(msg);
@@ -61,6 +62,7 @@ export default function SettingsClient({ user, userSettings }: Props) {
       emergency_fund_amount: emergencyFund,
       partner_name: partnerNameTrimmed,
       partner_account_balance: partnerBalanceParsed,
+      partner_whatsapp_phone: partnerWhatsapp.trim() || null,
       updated_at: new Date().toISOString(),
     };
 
@@ -287,6 +289,19 @@ export default function SettingsClient({ user, userSettings }: Props) {
               className="w-56 h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300/50 focus:border-pink-400"
               placeholder="e.g. Priya"
             />
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1.5 block text-muted-foreground">Partner&apos;s WhatsApp number</label>
+            <input
+              type="tel"
+              value={partnerWhatsapp}
+              onChange={(e) => setPartnerWhatsapp(e.target.value)}
+              className="w-56 h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300/50 focus:border-pink-400"
+              placeholder="+919xxxxxxxxx"
+            />
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Their WhatsApp messages will log to your shared account, tagged as {partnerName || "partner"}.
+            </p>
           </div>
           <div>
             <label className="text-sm font-medium mb-1.5 block text-muted-foreground">Current account balance (₹)</label>

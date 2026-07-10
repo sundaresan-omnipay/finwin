@@ -121,3 +121,33 @@
   pointer-events: none;
   border-radius: inherit;
 }
+
+/* Mobile safe area for bottom nav */
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Skeleton shimmer — more polished than plain pulse */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.animate-pulse {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--secondary) / 0.7) 25%,
+    hsl(var(--secondary) / 0.4) 50%,
+    hsl(var(--secondary) / 0.7) 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* Page content fade-in on route change */
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+main > div > * {
+  animation: page-fade-in 0.2s ease-out both;
+}

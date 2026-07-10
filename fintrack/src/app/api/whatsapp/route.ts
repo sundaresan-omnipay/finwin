@@ -1,66 +1,43 @@
-/**
- * WhatsApp Quick-Entry (Feature 8 — Phase 5)
- *
- * Setup:
- *   1. Create a Twilio account, get a WhatsApp sandbox number
- *   2. Set webhook URL to: https://your-domain.com/api/whatsapp
- *   3. Add env vars: TWILIO_AUTH_TOKEN, TWILIO_ACCOUNT_SID
- *   4. User registers their WhatsApp number in Settings → whatsapp_phone field
- *
- * Message format (from user's registered WhatsApp number):
- *   "250 swiggy food"      → ₹250, description "swiggy", category food
- *   "500 auto transport"   → ₹500, description "auto", category transport
- *   "1200 electricity bills" → ₹1200, description "electricity", category bills
- *   "250 chai"             → ₹250, description "chai", category other (default)
- *   "help"                 → lists valid categories
- *
- * Category keywords recognised:
- *   food, transport, shopping, bills, health, entertainment, travel, education, other
- */
-
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const VALID_CATEGORIES = ["food", "transport", "shopping", "bills", "health", "entertainment", "travel", "education", "other"] as const;
-type Category = typeof VALID_CATEGORIES[number];
+const CATEGORIES = [
+  { key: "food",          label: "Food / Dining" },
+  { key: "transport",     label: "Transport" },
+  { key: "groceries",     label: "Groceries" },
+  { key: "shopping",      label: "Shopping" },
+  { key: "bills",         label: "Bills / Utilities" },
+  { key: "health",        label: "Health" },
+  { key: "entertainment", label: "Entertainment" },
+  { key: "travel",        label: "Travel" },
+  { key: "education",     label: "Education" },
+  { key: "other",         label: "Other" },
+] as const;
+
+type Category = typeof CATEGORIES[number]["key"];
+const CATEGORY_KEYS = CATEGORIES.map(c => c.key) as unknown as Category[];
 
 function twimlResponse(body: string): NextResponse {
-  const xml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${body}</Message></Response>`;
-  return new NextResponse(xml, {
-    status: 200,
-    headers: { "Content-Type": "text/xml" },
-  });
+  const escaped = body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const xml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escaped}</Message></Response>`;
+  return new NextResponse(xml, { status: 200, headers: { "Content-Type": "text/xml" } });
 }
 
-function parseMessage(text: string): { amount: number; description: string; category: Category } | null {
-  const clean = text.trim().toLowerCase();
+function categoryMenu(amount: number, description: string): string {
+  const lines = [`What category for ₹${amount} ${description}?\n`];
+  CATEGORIES.forEach((c, i) => lines.push(`${i + 1}. ${c.label}`));
+  lines.push("\nReply with a number");
+  return lines.join("\n");
+}
 
-  if (clean === "help") return null;
-
-  // Expected: "AMOUNT DESCRIPTION [CATEGORY]"
-  const parts = clean.split(/\s+/);
+function parseAmountAndDesc(text: string): { amount: number; description: string } | null {
+  const parts = text.trim().split(/\s+/);
   if (parts.length < 2) return null;
-
   const amount = parseFloat(parts[0]);
   if (isNaN(amount) || amount <= 0) return null;
-
-  // Last word might be a category
-  const lastWord = parts[parts.length - 1];
-  let category: Category = "other";
-  let descriptionParts = parts.slice(1);
-
-  if (VALID_CATEGORIES.includes(lastWord as Category) && parts.length > 2) {
-    category = lastWord as Category;
-    descriptionParts = parts.slice(1, -1);
-  }
-
-  const description = descriptionParts.join(" ");
-  if (!description) return null;
-
-  // Capitalise first letter
-  const formattedDesc = description.charAt(0).toUpperCase() + description.slice(1);
-
-  return { amount, description: formattedDesc, category };
+  const description = parts.slice(1).join(" ");
+  const formatted = description.charAt(0).toUpperCase() + description.slice(1);
+  return { amount, description: formatted };
 }
 
 export async function POST(req: NextRequest) {
@@ -72,18 +49,13 @@ export async function POST(req: NextRequest) {
     return twimlResponse("Could not process your message. Send 'help' for usage.");
   }
 
-  // Normalise phone: WhatsApp prefixes "whatsapp:+91..."
   const phone = from.replace("whatsapp:", "").trim();
+  const last10 = phone.replace(/^\+?(\d+)/, (_, d) => d).slice(-10);
 
   if (body.toLowerCase() === "help") {
     return twimlResponse(
-      "FinWin Quick-Entry\n\nFormat: AMOUNT DESCRIPTION [CATEGORY]\n\nExamples:\n250 swiggy food\n500 auto transport\n1200 electricity bills\n\nCategories: food, transport, shopping, bills, health, entertainment, travel, education, other"
+      "FinWin Quick-Entry\n\nSend: AMOUNT DESCRIPTION\nExample: 250 swiggy\n\nI'll ask you to pick a category.\nOr include it directly: 250 swiggy food"
     );
-  }
-
-  const parsed = parseMessage(body);
-  if (!parsed) {
-    return twimlResponse("Could not parse that. Try: '250 swiggy food' or send 'help'.");
   }
 
   const supabase = createClient(
@@ -91,35 +63,121 @@ export async function POST(req: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // Look up user by registered WhatsApp number
-  const { data: settings, error: settingsErr } = await supabase
+  // Resolve user from phone number
+  const { data: byOwn } = await supabase
     .from("user_settings")
-    .select("user_id")
-    .eq("whatsapp_phone", phone)
+    .select("user_id, partner_name")
+    .ilike("whatsapp_phone", `%${last10}`)
     .maybeSingle();
 
-  if (settingsErr || !settings) {
+  const { data: byPartner } = byOwn
+    ? { data: null }
+    : await supabase
+        .from("user_settings")
+        .select("user_id, partner_name")
+        .ilike("partner_whatsapp_phone", `%${last10}`)
+        .maybeSingle();
+
+  const settings = byOwn || byPartner;
+  const isPartner = !byOwn && !!byPartner;
+
+  if (!settings) {
     return twimlResponse(
       "Your number is not registered with FinWin. Go to Settings → WhatsApp and add your number."
     );
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  // ── Step 2: user is picking a category from the menu ──────────────────
+  const pick = parseInt(body.trim());
+  if (!isNaN(pick) && pick >= 1 && pick <= CATEGORIES.length) {
+    const { data: pending } = await supabase
+      .from("whatsapp_pending")
+      .select("*")
+      .eq("phone", last10)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle();
 
-  const { error: insertErr } = await supabase.from("transactions").insert({
-    user_id: settings.user_id,
-    amount: parsed.amount,
-    description: parsed.description,
-    category: parsed.category,
-    date: today,
-    notes: "via WhatsApp",
-  });
+    if (!pending) {
+      return twimlResponse("No pending transaction. Send AMOUNT DESCRIPTION first.\nExample: 250 swiggy");
+    }
 
-  if (insertErr) {
-    return twimlResponse("Something went wrong logging your transaction. Please try again.");
+    const category = CATEGORIES[pick - 1].key as Category;
+    const today = new Date().toISOString().split("T")[0];
+    const notesTag = isPartner
+      ? `via WhatsApp (${settings.partner_name || "partner"})`
+      : "via WhatsApp";
+
+    const [{ error: insertErr }] = await Promise.all([
+      supabase.from("transactions").insert({
+        user_id: settings.user_id,
+        amount: pending.amount,
+        description: pending.description,
+        category,
+        date: today,
+        notes: notesTag,
+        member: isPartner ? (settings.partner_name || "partner") : null,
+      }),
+      supabase.from("whatsapp_pending").delete().eq("phone", last10),
+    ]);
+
+    if (insertErr) {
+      return twimlResponse("Something went wrong. Please try again.");
+    }
+
+    const whoTag = isPartner ? ` · ${settings.partner_name || "partner"}` : "";
+    const catLabel = CATEGORIES[pick - 1].label;
+    return twimlResponse(
+      `✅ Logged!\n₹${pending.amount} · ${pending.description} · ${catLabel}${whoTag}\n${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+    );
   }
 
-  return twimlResponse(
-    `✅ Logged!\n₹${parsed.amount} · ${parsed.description} · ${parsed.category}\n${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+  // ── Step 1: parse amount + description ────────────────────────────────
+  const parts = body.trim().split(/\s+/);
+  const amount = parseFloat(parts[0]);
+
+  if (isNaN(amount) || amount <= 0 || parts.length < 2) {
+    return twimlResponse("Could not parse that.\n\nSend: AMOUNT DESCRIPTION\nExample: 250 swiggy");
+  }
+
+  // Check if last word is a known category keyword (power-user shortcut)
+  const lastWord = parts[parts.length - 1].toLowerCase();
+  const inlineCategory = CATEGORY_KEYS.find(k => k === lastWord);
+
+  if (inlineCategory && parts.length > 2) {
+    const description = parts.slice(1, -1).join(" ");
+    const formatted = description.charAt(0).toUpperCase() + description.slice(1);
+    const today = new Date().toISOString().split("T")[0];
+    const notesTag = isPartner
+      ? `via WhatsApp (${settings.partner_name || "partner"})`
+      : "via WhatsApp";
+
+    const { error: insertErr } = await supabase.from("transactions").insert({
+      user_id: settings.user_id,
+      amount,
+      description: formatted,
+      category: inlineCategory,
+      date: today,
+      notes: notesTag,
+      member: isPartner ? (settings.partner_name || "partner") : null,
+    });
+
+    if (insertErr) return twimlResponse("Something went wrong. Please try again.");
+
+    const whoTag = isPartner ? ` · ${settings.partner_name || "partner"}` : "";
+    return twimlResponse(
+      `✅ Logged!\n₹${amount} · ${formatted} · ${inlineCategory}${whoTag}\n${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+    );
+  }
+
+  // No inline category — save pending and ask
+  const description = parts.slice(1).join(" ");
+  const formatted = description.charAt(0).toUpperCase() + description.slice(1);
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 min TTL
+
+  await supabase.from("whatsapp_pending").upsert(
+    { phone: last10, user_id: settings.user_id, amount, description: formatted, expires_at: expiresAt },
+    { onConflict: "phone" }
   );
+
+  return twimlResponse(categoryMenu(amount, formatted));
 }

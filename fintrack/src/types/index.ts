@@ -41,6 +41,7 @@ export interface UserSettings {
   whatsapp_phone: string | null;
   partner_name: string | null;
   partner_account_balance: number | null;
+  partner_whatsapp_phone: string | null;
   emergency_fund_amount: number | null;
   created_at: string;
   updated_at: string;
