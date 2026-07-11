@@ -7,6 +7,7 @@ import { Plus, X, Loader2, Pencil, Trash2, CheckCircle2, PlusCircle, Target } fr
 import { createClient } from "@/lib/supabase/client";
 import { Goal } from "@/types";
 import { BlurAmount } from "@/components/ui/BlurAmount";
+import { formatCurrency } from "@/lib/utils";
 
 interface Props {
   goals: Goal[];
@@ -140,6 +141,29 @@ export default function GoalsClient({ goals, userId }: Props) {
     return `${months}mo left`;
   }
 
+  function monthlyNeeded(goal: Goal): { amount: number; months: number } | null {
+    if (!goal.target_date) return null;
+    const remaining = goal.target_amount - goal.current_amount;
+    if (remaining <= 0) return null;
+    const months = Math.max(1, Math.ceil((new Date(goal.target_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24 * 30.44)));
+    return { amount: Math.ceil(remaining / months), months };
+  }
+
+  function projectedCompletion(goal: Goal): string | null {
+    if (goal.current_amount <= 0) return null;
+    const createdAt = new Date(goal.created_at);
+    const elapsed = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+    if (elapsed <= 0) return null;
+    const monthlyRate = goal.current_amount / elapsed;
+    if (monthlyRate <= 0) return null;
+    const remaining = goal.target_amount - goal.current_amount;
+    if (remaining <= 0) return null;
+    const monthsLeft = Math.ceil(remaining / monthlyRate);
+    const completionDate = new Date();
+    completionDate.setMonth(completionDate.getMonth() + monthsLeft);
+    return completionDate.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -195,6 +219,8 @@ export default function GoalsClient({ goals, userId }: Props) {
                 const pct = Math.min(100, Math.round((goal.current_amount / goal.target_amount) * 100));
                 const remaining = goal.target_amount - goal.current_amount;
                 const isAdding = addingToId === goal.id;
+                const needed = monthlyNeeded(goal);
+                const projected = !goal.target_date ? projectedCompletion(goal) : null;
                 return (
                   <motion.div key={goal.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
                     className="bg-card border border-border/50 rounded-2xl p-5">
@@ -224,6 +250,16 @@ export default function GoalsClient({ goals, userId }: Props) {
                               <> · <BlurAmount value={remaining} className="text-muted-foreground" /> to go</>
                             )}
                           </div>
+                          {needed && (
+                            <div className="text-xs mt-1 font-medium text-violet-600 dark:text-violet-400">
+                              Save {formatCurrency(needed.amount)}/month to reach by target date
+                            </div>
+                          )}
+                          {projected && !needed && (
+                            <div className="text-xs mt-1 text-muted-foreground">
+                              At current pace → {projected}
+                            </div>
+                          )}
                           {goal.notes && <div className="text-xs text-muted-foreground/70 italic mt-0.5">{goal.notes}</div>}
                         </div>
                       </div>

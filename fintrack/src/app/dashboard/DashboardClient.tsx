@@ -113,10 +113,22 @@ export default function DashboardClient({
   }, [categoryTotals]);
 
   // --- Safe to spend today (Feature 4) ---
+  // Subtract bills due before cycle end so committed money isn't counted as "free"
+  const billsInCycleTotal = useMemo(() => {
+    const today = new Date();
+    return bills.filter((b) => {
+      if (!b.amount || !b.is_active) return false;
+      let dueDate = new Date(today.getFullYear(), today.getMonth(), b.due_day);
+      if (dueDate < today) dueDate = new Date(today.getFullYear(), today.getMonth() + 1, b.due_day);
+      return dueDate.toISOString().split("T")[0] <= cycle.end;
+    }).reduce((s, b) => s + (b.amount || 0), 0);
+  }, [bills, cycle.end]);
+
   const safeToSpend = useMemo(() => {
     if (totalBudget <= 0 || remaining <= 0) return null;
-    return remaining / cycle.daysLeft;
-  }, [totalBudget, remaining, cycle.daysLeft]);
+    const freeRemaining = Math.max(0, remaining - billsInCycleTotal);
+    return freeRemaining / Math.max(1, cycle.daysLeft);
+  }, [totalBudget, remaining, cycle.daysLeft, billsInCycleTotal]);
 
   // --- No-spend streak (Feature 7) ---
   const streak = useMemo(() => computeNoSpendStreak(transactions), [transactions]);
@@ -435,13 +447,14 @@ export default function DashboardClient({
     breakdown.push({ label: "Streak", pts: streakPts, max: 15, tip: streak.current === 0 ? "Start a streak" : `${streak.current} days`, good: streakPts >= 10 });
     score += streakPts;
 
-    // Emergency fund (0-20)
+    // Emergency fund (0-20) — use total monthly outflow (day-to-day + EMI + SIP) for accurate coverage
     const emergencyAmt = userSettings?.emergency_fund_amount;
     let emergencyPts = 10;
     let emergencyTip = "Set in Settings";
     if (emergencyAmt && emergencyAmt > 0) {
-      const refSpend = (prevDayToDaySpent > 0 ? prevDayToDaySpent : dayToDaySpent) || 1;
-      const months = emergencyAmt / refSpend;
+      const dayToDay = (prevDayToDaySpent > 0 ? prevDayToDaySpent : dayToDaySpent) || 0;
+      const totalMonthlyOutflow = dayToDay + totalEmiMonthly + totalSipMonthly || 1;
+      const months = emergencyAmt / totalMonthlyOutflow;
       emergencyPts = months >= 6 ? 20 : months >= 3 ? 15 : months >= 1 ? 8 : 2;
       emergencyTip = `${months.toFixed(1)} months covered`;
     }
@@ -550,7 +563,12 @@ export default function DashboardClient({
             <div className="mb-1 text-sm text-muted-foreground leading-snug">
               per day · <span className="font-medium text-foreground">{cycle.daysLeft} days</span> left<br />
               {totalBudget > 0 && (
-                <span>Based on <span className="font-medium">{formatCurrency(totalBudget)}</span> budget</span>
+                <span>
+                  {formatCurrency(remaining)} remaining
+                  {billsInCycleTotal > 0 && (
+                    <span className="text-amber-600 dark:text-amber-400"> · {formatCurrency(billsInCycleTotal)} reserved for upcoming bills</span>
+                  )}
+                </span>
               )}
             </div>
           </div>
@@ -728,7 +746,7 @@ export default function DashboardClient({
             </div>
           )}
           <div className="mt-1 text-[10px] text-indigo-500/60 dark:text-indigo-500/50">
-            Estimate based on active SIPs × {tax80c.monthsElapsedInFY} months in FY. Includes ELSS, PPF contributions.
+            Estimate based on SIP contributions × {tax80c.monthsElapsedInFY} months in FY. Only ELSS mutual funds qualify for 80C — verify eligibility with your fund house.
           </div>
         </motion.div>
       )}
@@ -1190,7 +1208,11 @@ export default function DashboardClient({
                           />
                         )}
                         <div
-                          className={`absolute inset-y-0 left-0 rounded-full transition-all ${diff > 50 ? "bg-red-400" : diff < -50 ? "bg-emerald-500" : "bg-violet-400"}`}
+                          className={`absolute inset-y-0 left-0 rounded-full transition-all ${
+                            (prev > 0 && diff / prev > 0.2 && diff > 300) ? "bg-red-400"
+                            : (prev > 0 && diff / prev < -0.2 && Math.abs(diff) > 300) ? "bg-emerald-500"
+                            : "bg-violet-400"
+                          }`}
                           style={{ width: `${(curr / maxAmt) * 100}%` }}
                         />
                       </div>

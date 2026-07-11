@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, Loader2, ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-react";
+import { Plus, X, Loader2, ChevronDown, ChevronUp, Pencil, Trash2, Calculator } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Loan } from "@/types";
 import { formatCurrency } from "@/lib/utils";
@@ -12,6 +12,7 @@ import { BlurAmount } from "@/components/ui/BlurAmount";
 interface Props {
   loans: Loan[];
   userId: string;
+  monthlySalary?: number | null;
 }
 
 interface AmortizationRow {
@@ -61,12 +62,18 @@ function monthsPaid(loan: Loan): number {
   return Math.min(Math.max(0, paid), loan.tenure_months);
 }
 
+function emiFormula(principal: number, annualRate: number, tenureMonths: number): number {
+  if (annualRate === 0) return Math.round(principal / tenureMonths);
+  const r = annualRate / 12 / 100;
+  return Math.round(principal * r * Math.pow(1 + r, tenureMonths) / (Math.pow(1 + r, tenureMonths) - 1));
+}
+
 const emptyForm = {
   loan_name: "", principal_amount: "", emi_amount: "",
   annual_interest_rate: "", tenure_months: "", start_date: new Date().toISOString().split("T")[0], notes: "",
 };
 
-export default function LoanClient({ loans, userId }: Props) {
+export default function LoanClient({ loans, userId, monthlySalary }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const [open, setOpen] = useState(false);
@@ -76,26 +83,30 @@ export default function LoanClient({ loans, userId }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [scheduleLimit, setScheduleLimit] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
+  const [computedEmi, setComputedEmi] = useState<number | null>(null);
 
   const activeLoans = loans.filter((l) => l.is_active);
   const totalMonthlyEmi = activeLoans.reduce((s, l) => s + l.emi_amount, 0);
+  const foir = monthlySalary && monthlySalary > 0 ? (totalMonthlyEmi / monthlySalary) * 100 : null;
 
   const totalOutstanding = activeLoans.reduce((sum, loan) => {
     const schedule = computeAmortization(loan);
     const paid = monthsPaid(loan);
-    const row = schedule[paid - 1];
-    return sum + (row ? row.outstanding : loan.principal_amount);
+    const row = paid > 0 ? schedule[paid - 1] : null;
+    return sum + (row ? row.outstanding : (loan.principal_amount ?? 0));
   }, 0);
 
   function openAdd() {
     setEditingLoan(null);
     setForm(emptyForm);
     setError("");
+    setComputedEmi(null);
     setOpen(true);
   }
 
   function openEdit(loan: Loan) {
     setEditingLoan(loan);
+    setComputedEmi(null);
     setForm({
       loan_name: loan.loan_name,
       principal_amount: String(loan.principal_amount),
@@ -161,18 +172,55 @@ export default function LoanClient({ loans, userId }: Props) {
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {[
-          { label: "Monthly EMI total", value: <BlurAmount value={totalMonthlyEmi} className="number-font text-2xl font-700 text-white" />, sub: `${activeLoans.length} active loan${activeLoans.length !== 1 ? "s" : ""} · auto-deducted`, icon: "📅", color: "from-indigo-500 to-purple-600" },
-          { label: "Total outstanding", value: <BlurAmount value={totalOutstanding} className="number-font text-2xl font-700 text-white" />, sub: "Across all loans", icon: "🏦", color: "from-rose-500 to-pink-600" },
+          {
+            label: "Monthly EMI total",
+            value: <BlurAmount value={totalMonthlyEmi} className="number-font text-2xl font-700 text-white" />,
+            sub: `${activeLoans.length} active loan${activeLoans.length !== 1 ? "s" : ""} · auto-deducted`,
+            icon: "📅",
+            color: "from-indigo-500 to-purple-600",
+            badge: foir !== null
+              ? { label: `FOIR: ${foir.toFixed(0)}%`, color: foir > 50 ? "bg-red-400/30" : foir > 35 ? "bg-amber-400/30" : "bg-emerald-400/30" }
+              : null,
+          },
+          {
+            label: "Total outstanding",
+            value: <BlurAmount value={totalOutstanding} className="number-font text-2xl font-700 text-white" />,
+            sub: "Remaining principal across all loans",
+            icon: "🏦",
+            color: "from-rose-500 to-pink-600",
+            badge: null,
+          },
         ].map((card, i) => (
           <motion.div key={card.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
             className={`rounded-2xl p-5 bg-gradient-to-br ${card.color} text-white relative overflow-hidden`}>
             <div className="absolute -top-3 -right-3 text-5xl opacity-20">{card.icon}</div>
-            <div className="text-white/70 text-xs font-semibold uppercase tracking-widest mb-2">{card.label}</div>
+            <div className="flex items-start justify-between mb-2">
+              <div className="text-white/70 text-xs font-semibold uppercase tracking-widest">{card.label}</div>
+              {card.badge && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${card.badge.color} text-white`}>{card.badge.label}</span>
+              )}
+            </div>
             <div className="mb-1">{card.value}</div>
             <div className="text-white/60 text-xs">{card.sub}</div>
           </motion.div>
         ))}
       </div>
+
+      {/* FOIR explanation */}
+      {foir !== null && (
+        <div className={`flex items-start gap-3 px-4 py-3 rounded-xl text-xs border ${
+          foir > 50 ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-400"
+          : foir > 35 ? "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-400"
+          : "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-400"
+        }`}>
+          <Calculator className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+          <div>
+            <span className="font-semibold">FOIR {foir.toFixed(1)}%</span>
+            {" "}— Fixed Obligation to Income Ratio. Banks approve loans up to ~40–50%. {" "}
+            {foir > 50 ? "Your ratio is high — new loan applications may be declined." : foir > 35 ? "Approaching the safe limit. Avoid taking on more debt." : "Healthy. You have capacity for additional credit if needed."}
+          </div>
+        </div>
+      )}
 
       {/* Loan list */}
       {loans.length === 0 ? (
@@ -189,8 +237,10 @@ export default function LoanClient({ loans, userId }: Props) {
           {loans.map((loan, i) => {
             const schedule = computeAmortization(loan);
             const paid = monthsPaid(loan);
-            const currentRow = schedule[paid] ?? schedule[schedule.length - 1];
-            const outstanding = currentRow ? currentRow.outstanding : 0;
+            const currentRow = paid > 0 ? (schedule[paid - 1] ?? schedule[schedule.length - 1]) : null;
+            const outstanding = currentRow ? currentRow.outstanding : (loan.principal_amount ?? 0);
+            const totalInterest = schedule.reduce((s, r) => s + r.interest, 0);
+            const interestPaidSoFar = schedule.slice(0, paid).reduce((s, r) => s + r.interest, 0);
             const progressPct = Math.round((paid / loan.tenure_months) * 100);
             const limit = scheduleLimit[loan.id] ?? 12;
             const isExpanded = expandedId === loan.id;
@@ -219,7 +269,14 @@ export default function LoanClient({ loans, userId }: Props) {
                             {paid} of {loan.tenure_months} months paid ·{" "}
                             {remaining > 0 ? <>{yearsLeft > 0 && `${yearsLeft}y `}{monthsLeft > 0 && `${monthsLeft}m`} remaining</> : "Fully paid off 🎉"}
                           </div>
-                          <div>Outstanding: <BlurAmount value={outstanding} className="font-semibold text-rose-600 dark:text-rose-400" /></div>
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span>Outstanding: <BlurAmount value={outstanding} className="font-semibold text-rose-600 dark:text-rose-400" /></span>
+                            <span className="text-muted-foreground/60">·</span>
+                            <span title="Total interest over full loan tenure">Total interest: <BlurAmount value={totalInterest} className="font-medium text-amber-600 dark:text-amber-400" /></span>
+                          </div>
+                          {paid > 0 && (
+                            <div className="text-muted-foreground/70">Interest paid so far: <BlurAmount value={interestPaidSoFar} className="font-medium" /></div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -358,6 +415,31 @@ export default function LoanClient({ loans, userId }: Props) {
                     placeholder="240" />
                 </div>
               </div>
+
+              {/* EMI calculator helper */}
+              {form.principal_amount && form.annual_interest_rate && form.tenure_months && !form.emi_amount && (() => {
+                const p = parseFloat(form.principal_amount);
+                const r = parseFloat(form.annual_interest_rate);
+                const n = parseInt(form.tenure_months);
+                if (!p || !n || isNaN(r)) return null;
+                const emi = emiFormula(p, r, n);
+                return (
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/40">
+                    <Calculator className="w-4 h-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
+                    <div className="flex-1 text-xs text-indigo-700 dark:text-indigo-300">
+                      Calculated EMI: <span className="font-bold text-sm">{formatCurrency(emi)}/month</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, emi_amount: String(emi) })}
+                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex-shrink-0"
+                    >
+                      Use this
+                    </button>
+                  </div>
+                );
+              })()}
+
               <div>
                 <label className="text-sm font-medium mb-1.5 block text-muted-foreground">First EMI date</label>
                 <input type="date" required value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })}

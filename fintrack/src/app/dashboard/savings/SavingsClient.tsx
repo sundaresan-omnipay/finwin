@@ -3,10 +3,17 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Plus, X, Loader2, TrendingUp, PauseCircle, Circle, Pencil, Trash2 } from "lucide-react";
+import { Plus, X, Loader2, TrendingUp, PauseCircle, Circle, Pencil, Trash2, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Sip } from "@/types";
 import { BlurAmount } from "@/components/ui/BlurAmount";
+import { formatCurrency } from "@/lib/utils";
+
+function sipFutureValue(monthlyAmount: number, annualCagr: number, years: number): number {
+  const r = annualCagr / 12 / 100;
+  const n = years * 12;
+  return monthlyAmount * ((Math.pow(1 + r, n) - 1) / r) * (1 + r);
+}
 
 interface Props {
   sips: Sip[];
@@ -158,6 +165,45 @@ export default function SavingsClient({ sips, userId }: Props) {
             </motion.div>
           ))}
         </div>
+      )}
+
+      {/* SIP corpus projection */}
+      {activeSips.length > 0 && totalMonthly > 0 && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+          className="bg-gradient-to-br from-emerald-50 via-teal-50/60 to-transparent dark:from-emerald-950/20 dark:via-teal-950/10 border border-emerald-200/60 dark:border-emerald-900/40 rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <div>
+              <h3 className="font-display text-sm font-600 text-emerald-800 dark:text-emerald-300">Corpus projection at 12% CAGR</h3>
+              <p className="text-[11px] text-emerald-600/70 dark:text-emerald-400/70">
+                Based on <BlurAmount value={totalMonthly} className="inline font-semibold" />/month total SIP · equity fund estimate
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {[5, 10, 15].map((years) => {
+              const corpus = sipFutureValue(totalMonthly, 12, years);
+              const invested = totalMonthly * years * 12;
+              const gains = corpus - invested;
+              const gainsPct = Math.round((gains / invested) * 100);
+              return (
+                <div key={years} className="bg-white/60 dark:bg-white/5 rounded-xl p-3.5 border border-emerald-100 dark:border-emerald-900/30">
+                  <div className="text-[10px] font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-1.5">{years} Years</div>
+                  <BlurAmount value={corpus} className="number-font text-base font-700 text-emerald-800 dark:text-emerald-200 block" />
+                  <div className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70 mt-1">
+                    +{gainsPct}% gains
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                    {formatCurrency(invested)} invested
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-emerald-600/50 dark:text-emerald-500/40 mt-3">
+            Illustrative only. Actual returns vary with market performance. Past returns do not guarantee future results.
+          </p>
+        </motion.div>
       )}
 
       {/* Add / Edit dialog */}
