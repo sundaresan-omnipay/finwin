@@ -16,5 +16,5 @@ export default async function FuelPage() {
     logs = (data || []) as FuelLog[];
   } catch {}
 
-  return <FuelClient logs={logs} />;
+  return <FuelClient logs={logs} userId={user!.id} />;
 }

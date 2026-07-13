@@ -9,7 +9,7 @@ import { formatCurrency } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { BlurAmount } from "@/components/ui/BlurAmount";
 
-interface Props { logs: FuelLog[] }
+interface Props { logs: FuelLog[]; userId: string }
 
 const FUEL_TYPES: { value: FuelType; label: string; icon: string }[] = [
   { value: "petrol", label: "Petrol", icon: "⛽" },
@@ -57,7 +57,7 @@ function withStats(logs: FuelLog[]): FillupWithStats[] {
   }).reverse(); // newest first for display
 }
 
-export default function FuelClient({ logs }: Props) {
+export default function FuelClient({ logs, userId }: Props) {
   const [form, setForm] = useState(BLANK);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -91,6 +91,7 @@ export default function FuelClient({ logs }: Props) {
     e.preventDefault();
     setSaving(true);
     const { error } = await supabase.from("fuel_logs").insert({
+      user_id: userId,
       date: form.date,
       liters: parseFloat(form.liters),
       amount: parseFloat(form.amount),
