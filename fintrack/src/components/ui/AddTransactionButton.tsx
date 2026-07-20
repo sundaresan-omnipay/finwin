@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Plus, Loader2, X, Coins, ArrowDownLeft, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -31,8 +32,11 @@ export default function AddTransactionButton({ userSettings, compact = false }: 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("spend");
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const supabase = createClient();
+
+  useEffect(() => { setMounted(true); }, []);
 
   const [spendForm, setSpendForm] = useState({
     description: "",
@@ -139,9 +143,10 @@ export default function AddTransactionButton({ userSettings, compact = false }: 
         </button>
       )}
 
-      <AnimatePresence>
+      {mounted && createPortal(
+        <AnimatePresence>
         {open && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -497,7 +502,9 @@ export default function AddTransactionButton({ userSettings, compact = false }: 
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+        document.body
+      )}
     </>
   );
 }
